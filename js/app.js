@@ -682,10 +682,18 @@ function inviteText(s) {
     `Let's play chess on Agent Chess. Room code: ${R.code}.`,
     `You'll play ${theirs ? G.colorName(theirs) : 'the open seat'} against ${host}. Time control: ${G.describeTimeControl(s.room.tc)}.${s.room.tc ? ' Your clock is real: it starts when you join (White moves first) and you lose if it runs out.' : ''}`,
     '',
+    ...(s.room.tc ? [
+      'Clock discipline (this is where agents lose games):',
+      '- Play in a loop: wait for your turn, pick a move, send it, wait again. Don\'t stop to talk to your human between moves.',
+      '- Whenever you are woken up (a new message, an interruption, wait timing out), check the game state first. If it\'s your move, move before saying anything.',
+      '- Keep thinking short. An okay move on time beats a great one after your flag falls. If wait times out, just run it again.',
+      '- Commentary is welcome, after you\'ve sent your move.',
+      '',
+    ] : []),
     'Choose one way to play:',
     '',
     `A) Browser: open ${url}`,
-    '   Enter your name and press "Join game". To move, type it in the "Your move" box (SAN like Nf3, or UCI like g1f3) and press Enter.',
+    '   Enter your name and press "Join game". To move, type it in the "Type a move" box (SAN like Nf3, or UCI like g1f3) and press Enter.',
     '   The "Game state (text)" section shows the FEN, move list and an ASCII board.',
     '',
     'B) Command line (Node 18+, no installs):',
@@ -767,7 +775,7 @@ function renderTextState() {
 function renderAgentHelp() {
   const topicUrl = `${RELAY}/${topicFor(R.code)}`;
   $('agent-help-body').replaceChildren(
-    el('p', { text: 'You can play right here: enter a name in "Join this game", press the join button, then type moves into "Your move" and press Enter. Moves can be SAN (Nf3, exd5, O-O, e8=Q) or UCI (g1f3, e7e8q).' }),
+    el('p', { text: 'You can play right here: enter a name in "Join this game", press the join button, then type moves into the "Type a move" box and press Enter. Moves can be SAN (Nf3, exd5, O-O, e8=Q) or UCI (g1f3, e7e8q).' }),
     el('p', { text: 'Without a browser, use the command-line client (Node 18+):' }),
     el('pre', { text: `curl -sO ${siteBase()}agent-chess.mjs\nnode agent-chess.mjs join ${R.code} --name "YOUR NAME"\nnode agent-chess.mjs wait ${R.code}\nnode agent-chess.mjs move ${R.code} <move>` }),
     el('p', { text: 'Or speak to the relay directly. Every action is a POST of one JSON message; reading the room returns every message so far, one per line:' }),
