@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import * as G from '../js/game.js';
+import { Chess } from '../vendor/chess.js';
 import { DEFAULT_RELAY, topicFor, parseNtfyLine } from '../js/relay.js';
 import { VERSION } from '../js/version.js';
 
@@ -23,6 +24,13 @@ Commands
   resign ROOM
   rematch ROOM               Ask for (or accept) a rematch with colors swapped
   chat ROOM "TEXT"           Post a message to the room
+  review ROOM [--game N]     After a game: every move numbered 14w/14b with the position before it
+  annotate ROOM AT "TEXT" [--tag TAG] [--better MOVE] [--game N]
+                             Comment on a move for the post-game review. AT is like 14w or 14b,
+                             or "summary" for the overall verdict. TAG is one of:
+                             brilliant great best good book interesting inaccuracy mistake blunder missed-win
+  annotate ROOM --file notes.json
+                             Post many comments: [{"at":"14b","tag":"mistake","text":"...","better":"Nd7"}, ...]
   create --name NAME [--color w|b|random] [--time 10+5|none]
                              Open a new room and print its code and link
 
@@ -160,6 +168,7 @@ function snapshot(s, me) {
     clock: G.clockAt(s, serverNow()),
     drawOfferedBy: s.drawOffer ? G.colorName(s.drawOffer).toLowerCase() : null,
     rematchRequested: s.result ? { white: s.rematch.w, black: s.rematch.b } : null,
+    analysisRequestedBy: s.result && s.analysis[s.game] ? s.analysis[s.game].requests.map((r) => r.by) : [],
     result: s.result ? { score: G.resultString(s.result), winner: s.result.winner ? G.colorName(s.result.winner).toLowerCase() : null, reason: s.result.reason } : null,
     legalMoves: myTurn ? s.chess.moves() : [],
     chat: s.feed.filter((f) => f.kind === 'chat').slice(-5).map((f) => `${f.from}: ${f.text}`),
@@ -183,6 +192,13 @@ function print(s, me, note) {
     console.log(`\nYour opponent offers a draw: draw ${pos[1]} accept | draw ${pos[1]} decline (or just move to decline).`);
   }
   if (s.result && seat && !s.rematch[seat]) console.log(`\nWant another game? rematch ${pos[1]}`);
+  const an = s.result && s.analysis[s.game];
+  if (an && seat && an.requests.some((r) => r.color !== seat)) {
+    const mine = G.noteCount(s, s.game);
+    console.log(`\n${an.requests.find((r) => r.color !== seat).by} asked for a post-game analysis${mine ? ` (${mine} comments posted so far)` : ''}.` +
+      `\n  1) node agent-chess.mjs review ${pos[1]}\n  2) node agent-chess.mjs annotate ${pos[1]} 14b "comment" --tag mistake --better Nd7   (one per key moment)` +
+      `\n  3) node agent-chess.mjs annotate ${pos[1]} summary "2-3 sentence verdict"`);
+  }
   const chat = s.feed.filter((f) => f.kind === 'chat').slice(-5);
   if (chat.length) console.log('\nRecent chat:\n' + chat.map((f) => `  ${f.from}: ${f.text}`).join('\n'));
 }
@@ -293,6 +309,102 @@ async function simpleAction(type, extra = {}, note) {
   print(after, id, note);
 }
 
+function pickGame(s) {
+  if (opt.game) return Number(opt.game);
+  if (s.result) return s.game;
+  if (s.history.length) return s.history[s.history.length - 1].game;
+  die('No finished game to review yet.');
+}
+
+async function cmdReview() {
+  const code = needRoom();
+  const { id } = identity(code);
+  const { s } = await load(code);
+  if (!s.room) die(`Room ${code} doesn't exist (or expired).`);
+  const g = pickGame(s);
+  const rec = G.gameRecord(s, g);
+  if (!rec || !rec.result) die(`Game ${g} isn't finished.`);
+  const a = s.analysis[g] || { requests: [], notes: {}, summaries: [] };
+  const seat = rec.players.w && rec.players.w.id === id ? 'w' : rec.players.b && rec.players.b.id === id ? 'b' : null;
+  if (JSON_OUT) {
+    console.log(JSON.stringify({
+      ok: true, game: g, white: rec.players.w && rec.players.w.name, black: rec.players.b && rec.players.b.name,
+      you: seat ? G.colorName(seat).toLowerCase() : 'spectator', result: G.resultString(rec.result), reason: rec.result.reason,
+      moves: rec.moves.map((m, i) => ({ at: G.plyLabel(i + 1), san: m.san, uci: m.uci, fenBefore: G.fenBefore(rec, i + 1), fenAfter: m.fen,
+        comments: (a.notes[i + 1] || []).map((n) => ({ by: n.author, tag: n.tag, text: n.text, better: n.better && n.better.san })) })),
+      summaries: a.summaries.map((x) => ({ by: x.author, text: x.text })),
+      analysisRequestedBy: a.requests.map((r) => r.by),
+    }, null, 2));
+    return;
+  }
+  console.log(`Game ${g}: ${rec.players.w ? rec.players.w.name : 'White'} (White) vs ${rec.players.b ? rec.players.b.name : 'Black'} (Black) — ${G.resultString(rec.result)}, ${rec.result.reason}.`);
+  if (seat) console.log(`You played ${G.colorName(seat)}.`);
+  console.log('\nAT     MOVE      POSITION BEFORE THE MOVE (FEN)');
+  rec.moves.forEach((m, i) => {
+    const at = G.plyLabel(i + 1);
+    const notes = (a.notes[i + 1] || []).map((n) => `   [${n.author}: ${G.TAGS[n.tag].symbol} ${n.text}${n.better ? ` | better ${n.better.san}` : ''}]`).join('');
+    console.log(`${at.padEnd(6)} ${m.san.padEnd(9)} ${G.fenBefore(rec, i + 1)}${notes}`);
+  });
+  for (const x of a.summaries) console.log(`\nSummary from ${x.author}: ${x.text}`);
+  console.log(`\nComment with: node agent-chess.mjs annotate ${code} <AT> "text" --tag <tag> --better <move>`);
+}
+
+async function cmdAnnotate() {
+  const code = needRoom();
+  const { id } = identity(code);
+  const { events, s } = await load(code);
+  if (!s.room) die(`Room ${code} doesn't exist (or expired).`);
+  const g = pickGame(s);
+  const rec = G.gameRecord(s, g);
+  if (!rec || !rec.result) die(`Game ${g} isn't finished yet. Comments open once it's over.`);
+  const seat = rec.players.w && rec.players.w.id === id ? 'w' : rec.players.b && rec.players.b.id === id ? 'b' : null;
+  if (!seat) die(`Only the two players of game ${g} can annotate it. Use the same --id you played with.`);
+
+  let items;
+  if (opt.file) {
+    try { items = JSON.parse(readFileSync(String(opt.file), 'utf8')); } catch (e) { die(`Couldn't read ${opt.file}: ${e.message}`); }
+    if (!Array.isArray(items)) items = [items];
+  } else {
+    const at = pos[2];
+    const text = pos.slice(3).join(' ');
+    if (!at) die(`Usage: annotate ${code} 14b "comment" [--tag mistake] [--better Nd7]   or   annotate ${code} summary "verdict"`);
+    items = [{ at, text, tag: opt.tag, better: opt.better }];
+  }
+  // Check each one locally first so mistakes are reported, not silently ignored.
+  const problems = [];
+  const ok = [];
+  for (const it of items) {
+    const isSummary = it.at == null || /^(summary|game|overall)$/i.test(String(it.at));
+    if (isSummary) {
+      if (!it.text) problems.push('summary: needs text');
+      else ok.push({ at: 'summary', text: String(it.text) });
+      continue;
+    }
+    const ply = G.parseAt(it.at);
+    if (!ply || ply > rec.moves.length) { problems.push(`${it.at}: no such move (game has ${rec.moves.length} half-moves; last is ${G.plyLabel(rec.moves.length)})`); continue; }
+    const tag = it.tag ? String(it.tag).toLowerCase() : undefined;
+    if (tag && !G.TAGS[tag]) { problems.push(`${it.at}: unknown tag "${it.tag}"`); continue; }
+    if (it.better) {
+      const c = new Chess(G.fenBefore(rec, ply));
+      if (!G.previewMove({ chess: c }, String(it.better))) problems.push(`${it.at}: better move "${it.better}" isn't legal there (posted without it)`);
+    }
+    ok.push({ at: G.plyLabel(ply), tag, text: it.text ? String(it.text) : '', better: it.better ? String(it.better) : undefined });
+  }
+  let lastId = null;
+  for (let i = 0; i < ok.length; i++) {
+    if (i > 0) await sleep(ok.length > 40 ? 5200 : 1100); // stay under the relay's rate limit
+    lastId = await publish(code, { type: 'annotation', id, game: g, ...ok[i] });
+  }
+  const after = await settle(code, events, lastId);
+  const count = G.noteCount(after, g);
+  const report = { ok: true, posted: ok.length, problems, commentsOnGame: count };
+  if (JSON_OUT) console.log(JSON.stringify(report, null, 2));
+  else {
+    console.log(`Posted ${ok.length} comment${ok.length === 1 ? '' : 's'} on game ${g} (${count} in total). They show up in the game review on the page.`);
+    if (problems.length) console.log('Problems:\n  ' + problems.join('\n  '));
+  }
+}
+
 async function cmdChat() {
   const code = needRoom();
   const text = pos.slice(2).join(' ');
@@ -378,6 +490,8 @@ const commands = {
   wait: cmdWait,
   create: cmdCreate,
   chat: cmdChat,
+  review: cmdReview,
+  annotate: cmdAnnotate,
   resign: () => simpleAction('resign', {}, 'You resigned.'),
   rematch: () => simpleAction('rematch', {}, 'Rematch requested.'),
   flag: () => simpleAction('flag', {}, 'Checked the clock.'),

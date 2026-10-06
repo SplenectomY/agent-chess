@@ -11,6 +11,7 @@
   --clock-face: #1c2433;
   --clock-text: #e9edf2;
   --focus: #2f6fd6;
+  --better: #1a9d6c;
   --piece-white: #fbfbf8;
   --piece-black: #1a1f2a;
   --font: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -61,7 +62,7 @@ button, input { font: inherit; color: inherit; }
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
   padding: 12px 20px; border-bottom: 1px solid var(--line);
 }
-.brand { display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 800; font-stretch: 118%; font-size: 1.1rem; }
+.brand { white-space: nowrap; display: inline-flex; align-items: center; gap: 10px; text-decoration: none; font-weight: 800; font-stretch: 118%; font-size: 1.1rem; }
 .brand-mark {
   width: 22px; height: 22px; display: inline-block;
   background: conic-gradient(var(--ink) 0 25%, var(--signal) 0 50%, var(--ink) 0 75%, var(--signal) 0);
@@ -227,6 +228,44 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 }
 .banner strong { display: block; font-size: 1.6rem; font-stretch: 120%; font-weight: 800; }
 
+/* analysis: arrows, badges, tags */
+.arrows { position: absolute; inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); pointer-events: none; z-index: 6; }
+.arrow-better { stroke: var(--better); stroke-width: .17; stroke-linecap: round; opacity: .85; }
+.arrowhead { fill: var(--better); }
+.badge {
+  position: absolute; top: -6%; right: -6%; z-index: 7; min-width: 42%; height: 42%; padding: 0 4%;
+  border-radius: 999px; display: grid; place-items: center; font-size: 26cqh; font-weight: 800; line-height: 1;
+  color: #fff; background: var(--tag); box-shadow: 0 0 0 2px var(--surface);
+}
+.tag-brilliant { --tag: #1a9d97; } .tag-great { --tag: #4f7fb0; } .tag-best { --tag: #5d9b3c; }
+.tag-good { --tag: #78955e; } .tag-book { --tag: #9a7a55; } .tag-interesting { --tag: #8a6fc2; }
+.tag-inaccuracy { --tag: #c99a13; } .tag-mistake { --tag: #dd7a1f; } .tag-blunder { --tag: #c8372d; }
+.tag-missed-win { --tag: #b0457a; } .tag-note { --tag: #5b6779; }
+.sym { color: var(--tag); font-weight: 800; margin-left: 3px; font-size: .9em; }
+
+.banner-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 12px; align-items: center; }
+.btn.on-dark { border-color: var(--paper); color: var(--paper); min-height: 36px; padding: 6px 12px; }
+.btn.on-dark:hover { background: color-mix(in srgb, var(--paper) 15%, transparent); }
+.btn.on-dark.primary-ish { background: var(--signal); border-color: var(--signal); color: #1c2433; }
+
+.review-panel { border-left: 6px solid var(--better); }
+.review-panel .panel-head { margin-bottom: 6px; }
+.rv-where { font-weight: 750; font-stretch: 110%; font-size: 1.15rem; margin: 0 0 8px; }
+.rv-note { border-top: 1px solid var(--line); padding-top: 8px; margin-bottom: 8px; }
+.rv-note p { margin: 4px 0; }
+.rv-tag { display: inline-flex; align-items: center; gap: 4px; padding: 1px 8px; color: #fff; background: var(--tag); font-weight: 650; font-size: .88rem; }
+.rv-better strong { color: var(--better); }
+.rv-by { color: var(--muted); font-size: .88rem; }
+.rv-empty { color: var(--muted); }
+.rv-summary { background: var(--paper); border: 1px solid var(--line); padding: 10px 12px; margin: 8px 0; }
+.rv-summary h3 { margin: 0 0 4px; font-size: .95rem; }
+.rv-summary p { margin: 0; }
+.rv-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.rv-nav .nav { min-width: 44px; font-size: 1rem; }
+.sheet button.m { font: inherit; font-weight: 650; text-align: left; border: 0; background: none; cursor: pointer; color: inherit; }
+.sheet button.m:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.sheet button.m.latest { background: var(--signal); color: #1c2433; }
+
 /* side column */
 .status-line { margin: 0 0 12px; font-weight: 650; font-size: 1.05rem; }
 .status-line .your-move { background: var(--signal); color: #1c2433; padding: 1px 6px; }
@@ -290,6 +329,7 @@ details.panel[open] summary { margin-bottom: 10px; }
   .clock { font-size: 1.5rem; padding: 8px 12px 8px 18px; }
   .panel { padding: 14px; }
   .room-label { display: none; }
+  .conn { font-size: 0; gap: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

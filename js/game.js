@@ -59,7 +59,8 @@ export function initialState() {
     result: null, // { winner: 'w'|'b'|null, reason, time }
     drawOffer: null, // color that offered
     rematch: { w: false, b: false },
-    history: [], // finished games: { game, white, black, result, pgn }
+    history: [], // finished games: { game, white, black, players, moves, result, pgn }
+    analysis: {}, // game number -> { requests: [], notes: { [ply]: [note] }, summaries: [] }
     feed: [], // { time, kind: 'system'|'chat', text, from?, color? }
     lastEventTime: null,
   };
@@ -168,6 +169,8 @@ function startNewGame(s, time) {
     game: s.game,
     white: playerName(s, 'w'),
     black: playerName(s, 'b'),
+    players: { w: s.players.w, b: s.players.b },
+    moves: s.moves,
     result: s.result,
     pgn: toPgn(s),
   });
@@ -305,6 +308,50 @@ export function applyEvent(s, ev) {
       else system(s, T, `${playerName(s, seat)} wants a rematch (colors swap).`);
       return;
     }
+    case 'analysis-request': {
+      const g = targetGame(s, d.game);
+      const rec = g && gameRecord(s, g);
+      if (!rec || !rec.result) return;
+      const color = seatIn(rec, pid);
+      if (!color) return;
+      const a = analysisFor(s, g);
+      if (a.requests.some((r) => r.color === color)) return;
+      a.requests.push({ color, by: rec.players[color].name, time: T });
+      system(s, T, `${rec.players[color].name} asked for a post-game analysis of game ${g}.`);
+      return;
+    }
+    case 'annotation': {
+      const g = targetGame(s, d.game);
+      const rec = g && gameRecord(s, g);
+      if (!rec || !rec.result) return;
+      const color = seatIn(rec, pid);
+      if (!color) return;
+      const text = cleanText(d.text, NOTE_MAX);
+      const a = analysisFor(s, g);
+      const author = rec.players[color].name;
+      const firstFromAuthor = !a.summaries.some((x) => x.authorId === pid) &&
+        !Object.values(a.notes).some((list) => list.some((n) => n.authorId === pid));
+      if (d.at == null || /^(summary|game|overall)$/i.test(String(d.at))) {
+        if (!text) return;
+        a.summaries = a.summaries.filter((x) => x.authorId !== pid);
+        a.summaries.push({ authorId: pid, author, color, text, time: T });
+      } else {
+        const ply = parseAt(d.at);
+        if (!ply || ply > rec.moves.length) return;
+        const tag = TAGS[String(d.tag || '').toLowerCase()] ? String(d.tag).toLowerCase() : 'note';
+        let better = null;
+        if (typeof d.better === 'string' && d.better.trim()) {
+          const c = new Chess(fenBefore(rec, ply));
+          const mv = tryMove(c, d.better);
+          if (mv) better = { san: mv.san, from: mv.from, to: mv.to };
+        }
+        if (!text && !better && tag === 'note') return;
+        const list = (a.notes[ply] = (a.notes[ply] || []).filter((n) => n.authorId !== pid));
+        list.push({ authorId: pid, author, color, ply, tag, text, better, time: T });
+      }
+      if (firstFromAuthor) system(s, T, `${author} is annotating game ${g}.`);
+      return;
+    }
     case 'chat': {
       const text = cleanText(d.text, CHAT_MAX);
       if (!text) return;
@@ -321,6 +368,87 @@ export function replay(events) {
   const s = initialState();
   for (const ev of events) applyEvent(s, ev);
   return s;
+}
+
+// ---------- post-game analysis ----------
+
+const NOTE_MAX = 1000;
+
+// Annotation tags, shown as the usual chess symbols.
+export const TAGS = {
+  brilliant: { symbol: '!!', label: 'Brilliant' },
+  great: { symbol: '!', label: 'Great move' },
+  best: { symbol: '★', label: 'Best move' },
+  good: { symbol: '✓', label: 'Good move' },
+  book: { symbol: '📖', label: 'Book move' },
+  interesting: { symbol: '!?', label: 'Interesting' },
+  inaccuracy: { symbol: '?!', label: 'Inaccuracy' },
+  mistake: { symbol: '?', label: 'Mistake' },
+  blunder: { symbol: '??', label: 'Blunder' },
+  'missed-win': { symbol: '✗', label: 'Missed win' },
+  note: { symbol: '•', label: 'Comment' },
+};
+
+// "14w" / "14b" / "14..." / "14" (White) -> 1-based ply. Also accepts {at: 27} as a raw ply.
+export function parseAt(at) {
+  if (typeof at === 'number') return Number.isInteger(at) && at > 0 ? at : null;
+  const m = /^\s*(\d+)\s*(\.\.\.|\.|w|white|b|black)?\s*$/i.exec(String(at));
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (n < 1) return null;
+  const side = (m[2] || 'w').toLowerCase();
+  const black = side === '...' || side === 'b' || side === 'black';
+  return (n - 1) * 2 + (black ? 2 : 1);
+}
+
+export function plyLabel(ply) {
+  const n = Math.ceil(ply / 2);
+  return ply % 2 === 1 ? `${n}w` : `${n}b`;
+}
+
+// Moves "14. Nf3" / "14... Nf6" for display.
+export function moveLabel(ply, san) {
+  const n = Math.ceil(ply / 2);
+  return ply % 2 === 1 ? `${n}. ${san}` : `${n}... ${san}`;
+}
+
+export function gameRecord(s, g) {
+  if (g === s.game) return { game: g, players: s.players, moves: s.moves, result: s.result };
+  const h = s.history.find((x) => x.game === g);
+  return h ? { game: g, players: h.players, moves: h.moves, result: h.result } : null;
+}
+
+export const START_FEN = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+export function fenBefore(rec, ply) {
+  return ply <= 1 ? START_FEN : rec.moves[ply - 2].fen;
+}
+export function fenAfter(rec, ply) {
+  return ply <= 0 ? START_FEN : rec.moves[ply - 1].fen;
+}
+
+function seatIn(rec, id) {
+  if (rec.players.w && rec.players.w.id === id) return 'w';
+  if (rec.players.b && rec.players.b.id === id) return 'b';
+  return null;
+}
+
+// Which finished game an analysis message refers to: the one named, else the
+// current game if it's over, else the most recent finished one.
+function targetGame(s, g) {
+  if (g != null && Number.isInteger(Number(g))) return Number(g);
+  if (s.result) return s.game;
+  return s.history.length ? s.history[s.history.length - 1].game : null;
+}
+
+export function analysisFor(s, g) {
+  if (!s.analysis[g]) s.analysis[g] = { requests: [], notes: {}, summaries: [] };
+  return s.analysis[g];
+}
+
+export function noteCount(s, g) {
+  const a = s.analysis[g];
+  if (!a) return 0;
+  return Object.values(a.notes).reduce((n, list) => n + list.length, 0) + a.summaries.length;
 }
 
 export function resultString(result) {

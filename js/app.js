@@ -163,6 +163,7 @@ const R = {
   resignArmed: false,
   lastMoveCount: 0,
   renderQueued: false,
+  review: null, // { game, ply } while stepping through a finished game
 };
 
 const seat = () => G.seatOf(R.s, R.me && R.me.id);
@@ -263,6 +264,7 @@ function rebuild() {
     $('banner').hidden = false;
   }
   if (!s.result) $('banner').hidden = true;
+  if (R.review && (R.review.game !== s.game || !s.result)) R.review = null;
   liveSinceRender = false;
 }
 
@@ -287,6 +289,7 @@ function render() {
   renderSeatPanel();
   renderInvite();
   renderSheet();
+  renderReview();
   renderFeed();
   renderTextState();
   tick();
@@ -341,8 +344,16 @@ function tick() {
 }
 
 // ---------- board ----------
+function reviewRecord() {
+  return R.review ? G.gameRecord(R.s, R.review.game) : null;
+}
+function reviewNotes(ply) {
+  const a = R.review && R.s.analysis[R.review.game];
+  return (a && a.notes[ply]) || [];
+}
 function displayChess() {
   const s = R.s;
+  if (R.review) return new Chess(G.fenAfter(reviewRecord(), R.review.ply));
   if (!R.pending) return s.chess;
   const c = new Chess(s.chess.fen());
   try { c.move({ from: R.pending.uci.slice(0, 2), to: R.pending.uci.slice(2, 4), promotion: R.pending.uci[4] }); } catch { /* ignore */ }
@@ -359,7 +370,11 @@ function renderBoard() {
   const flip = flipped();
   const board = $('board');
   const files = 'abcdefgh';
-  const last = R.pending ? { from: R.pending.uci.slice(0, 2), to: R.pending.uci.slice(2, 4) } : s.moves[s.moves.length - 1];
+  const rec = reviewRecord();
+  const last = rec ? rec.moves[R.review.ply - 1]
+    : R.pending ? { from: R.pending.uci.slice(0, 2), to: R.pending.uci.slice(2, 4) } : s.moves[s.moves.length - 1];
+  const notesHere = rec ? reviewNotes(R.review.ply) : [];
+  const badgeTag = notesHere.length ? notesHere[0].tag : null;
   const targets = R.sel ? legalFrom(R.sel) : [];
   let checkSq = null;
   if (chess.inCheck()) {
@@ -385,6 +400,9 @@ function renderBoard() {
       const label = piece ? `${sq}, ${piece.color === 'w' ? 'white' : 'black'} ${PIECE_NAME[piece.type]}` : sq;
       const node = el('button', { class: cls, type: 'button', 'data-sq': sq, 'aria-label': label, tabindex: '-1' });
       if (piece) node.append(pieceNode(piece.color, piece.type));
+      if (badgeTag && last && last.to === sq) {
+        node.append(el('span', { class: `badge tag-${badgeTag}`, 'aria-hidden': 'true', text: G.TAGS[badgeTag].symbol }));
+      }
       if (r === 7) node.append(el('span', { class: 'coord file', text: files[file] }));
       if (f === 0) node.append(el('span', { class: 'coord rank', text: String(rank) }));
       squares.push(node);
@@ -395,13 +413,42 @@ function renderBoard() {
   const focusSq = board.querySelector('.sq.sel') || board.querySelector('.sq.movable') || board.firstChild;
   if (focusSq) focusSq.tabIndex = 0;
 
+  // Arrow for a suggested better move while reviewing.
+  const arrows = $('arrows');
+  arrows.replaceChildren();
+  const better = notesHere.find((n) => n.better);
+  if (better) {
+    const xy = (sq) => {
+      const file = sq.charCodeAt(0) - 97;
+      const rank = Number(sq[1]);
+      return flip ? [7 - file + 0.5, rank - 0.5] : [file + 0.5, 8 - rank + 0.5];
+    };
+    const [x1, y1] = xy(better.better.from);
+    const [x2, y2] = xy(better.better.to);
+    const len = Math.hypot(x2 - x1, y2 - y1);
+    const ex = x2 - ((x2 - x1) / len) * 0.32;
+    const ey = y2 - ((y2 - y1) / len) * 0.32;
+    const NS = 'http://www.w3.org/2000/svg';
+    const line = document.createElementNS(NS, 'line');
+    for (const [k, v] of Object.entries({ x1, y1, x2: ex, y2: ey, class: 'arrow-better', 'marker-end': 'url(#arrowhead)' })) line.setAttribute(k, v);
+    arrows.append(line);
+  }
+
   const banner = $('banner');
   if (s.result) {
     const res = G.resultString(s.result);
     const head = s.result.winner ? `${G.playerName(s, s.result.winner)} wins` : 'Draw';
-    banner.replaceChildren(el('strong', { text: `${res.replace('1/2-1/2', '½–½')}` }), el('div', { text: `${head} · ${s.result.reason}` }),
-      el('button', { class: 'link-btn', type: 'button', text: 'Hide', style: 'color:inherit', onclick: () => (banner.hidden = true) }));
+    const count = G.noteCount(s, s.game);
+    banner.replaceChildren(
+      el('strong', { text: `${res.replace('1/2-1/2', '½–½')}` }),
+      el('div', { text: `${head} · ${s.result.reason}` }),
+      el('div', { class: 'banner-actions' },
+        analysisButton(),
+        el('button', { class: 'btn on-dark', type: 'button', text: count ? `Review game (${count} comment${count === 1 ? '' : 's'})` : 'Review game', onclick: () => startReview() }),
+        el('button', { class: 'link-btn', type: 'button', text: 'Hide', style: 'color:inherit', onclick: () => (banner.hidden = true) })),
+    );
   }
+  if (R.review) banner.hidden = true;
 }
 
 function squareFromPoint(x, y) {
@@ -634,10 +681,12 @@ function renderStatus() {
     btns.push(el('button', { class: 'btn primary', type: 'button', disabled: asked,
       text: asked ? 'Rematch requested' : theyAsked ? 'Accept rematch' : 'Rematch',
       onclick: () => publish({ type: 'rematch', id: R.me.id, game: s.game }) }));
+    btns.push(analysisButton('btn'));
     btns.push(el('a', { class: 'btn', href: './', text: 'New room' }));
   }
+  if (s.result && !R.review) btns.push(el('button', { class: 'btn', type: 'button', text: 'Review game', onclick: () => startReview() }));
   btns.push(el('button', { class: 'btn', type: 'button', text: 'Flip board', onclick: () => { R.userFlip = !R.userFlip; renderBars(); renderBoard(); tick(); } }));
-  acts.replaceChildren(...btns);
+  acts.replaceChildren(...btns.filter(Boolean));
 }
 
 function renderSeatPanel() {
@@ -739,18 +788,176 @@ function renderSheet() {
   const sheet = $('sheet');
   const items = [];
   if (!s.moves.length) items.push(el('li', {}, el('span', { class: 'empty', text: s.started ? 'No moves yet.' : 'The game starts when both seats are filled.' })));
+  const finished = !!s.result;
+  const current = R.review ? R.review.ply - 1 : s.moves.length - 1;
+  const a = s.analysis[s.game];
+  const cell = (m, i) => {
+    if (!m) return el('span', { class: 'm' });
+    const notes = (a && a.notes[i + 1]) || [];
+    const tag = notes.length ? notes[0].tag : null;
+    const kids = [m.san, tag ? el('span', { class: `sym tag-${tag}`, title: G.TAGS[tag].label, text: G.TAGS[tag].symbol }) : null];
+    const cls = 'm' + (i === current ? ' latest' : '') + (tag ? ' noted' : '');
+    if (!finished) return el('span', { class: cls }, ...kids);
+    return el('button', { class: cls, type: 'button', 'aria-label': `Review ${G.moveLabel(i + 1, m.san)}${tag ? `, ${G.TAGS[tag].label}` : ''}`,
+      onclick: () => startReview(i + 1) }, ...kids);
+  };
   for (let i = 0; i < s.moves.length; i += 2) {
-    const w = s.moves[i];
-    const b = s.moves[i + 1];
-    const latest = s.moves.length - 1;
     items.push(el('li', {},
       el('span', { class: 'n', text: `${i / 2 + 1}.` }),
-      el('span', { class: 'm' + (i === latest ? ' latest' : ''), text: w ? w.san : '' }),
-      el('span', { class: 'm' + (i + 1 === latest ? ' latest' : ''), text: b ? b.san : '' })));
+      cell(s.moves[i], i),
+      cell(s.moves[i + 1], i + 1)));
   }
   if (s.result) items.push(el('li', {}, el('span', { class: 'res', text: G.resultString(s.result).replace('1/2-1/2', '½–½') })));
   sheet.replaceChildren(...items);
-  sheet.scrollTop = sheet.scrollHeight;
+  const cur = sheet.querySelector('.latest');
+  if (R.review && cur) cur.scrollIntoView({ block: 'nearest' });
+  else if (!R.review) sheet.scrollTop = sheet.scrollHeight;
+}
+
+// ---------- post-game analysis ----------
+function myAnalysisRequest() {
+  const a = R.s.analysis[R.s.game];
+  return !!(a && a.requests.some((r) => r.color === seat()));
+}
+
+function analysisButton(cls = 'btn on-dark') {
+  const s = R.s;
+  if (!seat() || !s.result) return null;
+  if (myAnalysisRequest()) {
+    return el('button', { class: cls, type: 'button', text: 'Copy analysis request', title: 'Copy the request again to paste to your opponent',
+      onclick: () => copy(analysisPrompt(), 'Analysis request copied') });
+  }
+  return el('button', { class: cls + ' primary-ish', type: 'button', text: 'Request analysis', onclick: requestAnalysis });
+}
+
+async function requestAnalysis() {
+  const s = R.s;
+  const ok = await publish({ type: 'analysis-request', id: R.me.id, game: s.game });
+  if (!ok) return;
+  await copy(analysisPrompt(), 'Analysis requested. The request is also on your clipboard: paste it to your opponent if they stopped listening.');
+  startReview();
+}
+
+function analysisPrompt() {
+  const s = R.s;
+  const me = seat();
+  const opp = me ? G.other(me) : null;
+  const topicUrl = `${RELAY}/${topicFor(R.code)}`;
+  const g = s.game;
+  return [
+    `Thanks for the game! Please give me a post-game analysis on Agent Chess (room ${R.code}, game ${g}). I played ${me ? G.colorName(me) : ''}${opp ? `, you played ${G.colorName(opp)}` : ''}.`,
+    'Comment on the key moments: good moves, inaccuracies, mistakes, blunders and missed chances. Suggest a better move where there was one, and finish with a 2–3 sentence summary. Your comments appear on my screen next to each move, with an arrow for each better move.',
+    '',
+    'With the command-line client (same id you played with):',
+    `   node agent-chess.mjs review ${R.code}                  # every move with its position, numbered like 14w / 14b`,
+    `   node agent-chess.mjs annotate ${R.code} 14b "Nf6 drops the e5 pawn." --tag mistake --better Nd7`,
+    `   node agent-chess.mjs annotate ${R.code} summary "Your 2–3 sentence summary."`,
+    '   Tags: brilliant, great, best, good, book, interesting, inaccuracy, mistake, blunder, missed-win (or leave it out for a plain comment).',
+    '',
+    'Over HTTP: POST one message per comment to the room relay, using your player id:',
+    `   curl -s -d '{"type":"annotation","id":"YOUR-ID","game":${g},"at":"14b","tag":"mistake","text":"...","better":"Nd7"}' ${topicUrl}`,
+    `   curl -s -d '{"type":"annotation","id":"YOUR-ID","game":${g},"at":"summary","text":"..."}' ${topicUrl}`,
+    '',
+    `Details: ${siteBase()}AGENTS.md (section "Post-game analysis").`,
+  ].join('\n');
+}
+
+function startReview(ply) {
+  const s = R.s;
+  if (!s.result) return;
+  const rec = G.gameRecord(s, s.game);
+  const p = ply != null ? ply : firstNotedPly() || rec.moves.length;
+  R.review = { game: s.game, ply: Math.max(0, Math.min(p, rec.moves.length)) };
+  R.sel = null;
+  render();
+  $('review-panel').scrollIntoView({ block: 'nearest' });
+}
+
+function firstNotedPly() {
+  const a = R.s.analysis[R.s.game];
+  if (!a) return null;
+  const plies = Object.keys(a.notes).map(Number).sort((x, y) => x - y);
+  return plies[0] || null;
+}
+
+function stepReview(to) {
+  if (!R.review) return;
+  const rec = reviewRecord();
+  R.review.ply = Math.max(0, Math.min(to, rec.moves.length));
+  renderBoard();
+  renderSheet();
+  renderReview();
+}
+
+function nextNoted(dir) {
+  const a = R.s.analysis[R.review.game];
+  if (!a) return;
+  const plies = Object.keys(a.notes).map(Number).sort((x, y) => x - y);
+  const cur = R.review.ply;
+  const target = dir > 0 ? plies.find((p) => p > cur) : [...plies].reverse().find((p) => p < cur);
+  if (target != null) stepReview(target);
+}
+
+function renderReview() {
+  const panel = $('review-panel');
+  if (!R.review) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  const s = R.s;
+  const rec = reviewRecord();
+  const ply = R.review.ply;
+  const a = s.analysis[R.review.game] || { requests: [], notes: {}, summaries: [] };
+  const notes = reviewNotes(ply);
+  const move = ply ? rec.moves[ply - 1] : null;
+  const total = rec.moves.length;
+  const plies = Object.keys(a.notes).map(Number);
+
+  const body = [];
+  if (ply === 0) {
+    body.push(el('p', { class: 'rv-where', text: 'Starting position' }));
+  } else {
+    body.push(el('p', { class: 'rv-where', text: G.moveLabel(ply, move.san) + ` · ${G.colorName(move.color)}` }));
+  }
+  if (notes.length) {
+    for (const n of notes) {
+      body.push(el('div', { class: 'rv-note' },
+        el('span', { class: `rv-tag tag-${n.tag}` }, el('b', { text: G.TAGS[n.tag].symbol }), ` ${G.TAGS[n.tag].label}`),
+        n.text ? el('p', { text: n.text }) : null,
+        n.better ? el('p', { class: 'rv-better' }, 'Better: ', el('strong', { text: n.better.san }), ' (arrow on the board)') : null,
+        el('p', { class: 'rv-by', text: `— ${n.author}` })));
+    }
+  } else if (ply > 0) {
+    body.push(el('p', { class: 'rv-empty', text: 'No comment on this move.' }));
+  }
+  if (a.summaries.length && (ply === 0 || ply === total)) {
+    for (const x of a.summaries) {
+      body.push(el('div', { class: 'rv-summary' }, el('h3', { text: `Summary from ${x.author}` }), el('p', { text: x.text })));
+    }
+  }
+  if (!plies.length && !a.summaries.length) {
+    const asked = a.requests.length;
+    body.push(el('p', { class: 'rv-empty', text: asked
+      ? `Analysis requested. Comments will appear here as ${seat() ? G.playerName(s, G.other(seat())) : 'the players'} add them.`
+      : 'No analysis yet. Use "Request analysis" to ask your opponent to annotate this game.' }));
+  }
+
+  const nav = (label, text, to, disabled) =>
+    el('button', { class: 'btn nav', type: 'button', 'aria-label': label, title: label, text, disabled, onclick: () => stepReview(to) });
+  panel.replaceChildren(
+    el('div', { class: 'panel-head' },
+      el('h2', { text: `Game review${plies.length || a.summaries.length ? ` · ${G.noteCount(s, R.review.game)} comments` : ''}` }),
+      el('button', { class: 'link-btn', type: 'button', text: 'Close review', onclick: () => { R.review = null; render(); } })),
+    ...body,
+    el('div', { class: 'rv-nav' },
+      nav('First position', '⏮', 0, ply === 0),
+      nav('Previous move', '◀', ply - 1, ply === 0),
+      nav('Next move', '▶', ply + 1, ply >= total),
+      nav('Last move', '⏭', total, ply >= total),
+      el('button', { class: 'btn', type: 'button', text: 'Next comment', disabled: !plies.some((p) => p > ply), onclick: () => nextNoted(1) })),
+    el('p', { class: 'hint', text: 'Tip: ← and → step through the moves.' }),
+  );
 }
 
 function renderFeed() {
@@ -812,6 +1019,16 @@ function wireRoomControls() {
   $('missing-retry').addEventListener('click', async () => {
     await R.relay.catchUp();
     render();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!R.review || e.target.closest('input, textarea, .board')) return;
+    const steps = { ArrowLeft: -1, ArrowRight: 1 };
+    if (e.key in steps) {
+      e.preventDefault();
+      stepReview(R.review.ply + steps[e.key]);
+    } else if (e.key === 'Home') stepReview(0);
+    else if (e.key === 'End') stepReview(Infinity);
+    else if (e.key === 'Escape') { R.review = null; render(); }
   });
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && R.relay) R.relay.catchUp().then(render);

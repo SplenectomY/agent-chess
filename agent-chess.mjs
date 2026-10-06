@@ -2382,6 +2382,7 @@ function initialState() {
     drawOffer: null,
     rematch: { w: false, b: false },
     history: [],
+    analysis: {},
     feed: [],
     lastEventTime: null
   };
@@ -2486,6 +2487,8 @@ function startNewGame(s, time) {
     game: s.game,
     white: playerName(s, "w"),
     black: playerName(s, "b"),
+    players: { w: s.players.w, b: s.players.b },
+    moves: s.moves,
     result: s.result,
     pgn: toPgn(s)
   });
@@ -2649,6 +2652,59 @@ function applyEvent(s, ev) {
         system(s, T, `${playerName(s, seat)} wants a rematch (colors swap).`);
       return;
     }
+    case "analysis-request": {
+      const g = targetGame(s, d.game);
+      const rec = g && gameRecord(s, g);
+      if (!rec || !rec.result)
+        return;
+      const color = seatIn(rec, pid);
+      if (!color)
+        return;
+      const a = analysisFor(s, g);
+      if (a.requests.some((r) => r.color === color))
+        return;
+      a.requests.push({ color, by: rec.players[color].name, time: T });
+      system(s, T, `${rec.players[color].name} asked for a post-game analysis of game ${g}.`);
+      return;
+    }
+    case "annotation": {
+      const g = targetGame(s, d.game);
+      const rec = g && gameRecord(s, g);
+      if (!rec || !rec.result)
+        return;
+      const color = seatIn(rec, pid);
+      if (!color)
+        return;
+      const text = cleanText(d.text, NOTE_MAX);
+      const a = analysisFor(s, g);
+      const author = rec.players[color].name;
+      const firstFromAuthor = !a.summaries.some((x) => x.authorId === pid) && !Object.values(a.notes).some((list) => list.some((n) => n.authorId === pid));
+      if (d.at == null || /^(summary|game|overall)$/i.test(String(d.at))) {
+        if (!text)
+          return;
+        a.summaries = a.summaries.filter((x) => x.authorId !== pid);
+        a.summaries.push({ authorId: pid, author, color, text, time: T });
+      } else {
+        const ply = parseAt(d.at);
+        if (!ply || ply > rec.moves.length)
+          return;
+        const tag = TAGS[String(d.tag || "").toLowerCase()] ? String(d.tag).toLowerCase() : "note";
+        let better = null;
+        if (typeof d.better === "string" && d.better.trim()) {
+          const c = new Chess(fenBefore(rec, ply));
+          const mv = tryMove(c, d.better);
+          if (mv)
+            better = { san: mv.san, from: mv.from, to: mv.to };
+        }
+        if (!text && !better && tag === "note")
+          return;
+        const list = a.notes[ply] = (a.notes[ply] || []).filter((n) => n.authorId !== pid);
+        list.push({ authorId: pid, author, color, ply, tag, text, better, time: T });
+      }
+      if (firstFromAuthor)
+        system(s, T, `${author} is annotating game ${g}.`);
+      return;
+    }
     case "chat": {
       const text = cleanText(d.text, CHAT_MAX);
       if (!text)
@@ -2666,6 +2722,72 @@ function replay(events) {
   for (const ev of events)
     applyEvent(s, ev);
   return s;
+}
+var NOTE_MAX = 1000;
+var TAGS = {
+  brilliant: { symbol: "!!", label: "Brilliant" },
+  great: { symbol: "!", label: "Great move" },
+  best: { symbol: "★", label: "Best move" },
+  good: { symbol: "✓", label: "Good move" },
+  book: { symbol: "\uD83D\uDCD6", label: "Book move" },
+  interesting: { symbol: "!?", label: "Interesting" },
+  inaccuracy: { symbol: "?!", label: "Inaccuracy" },
+  mistake: { symbol: "?", label: "Mistake" },
+  blunder: { symbol: "??", label: "Blunder" },
+  "missed-win": { symbol: "✗", label: "Missed win" },
+  note: { symbol: "•", label: "Comment" }
+};
+function parseAt(at) {
+  if (typeof at === "number")
+    return Number.isInteger(at) && at > 0 ? at : null;
+  const m = /^\s*(\d+)\s*(\.\.\.|\.|w|white|b|black)?\s*$/i.exec(String(at));
+  if (!m)
+    return null;
+  const n = Number(m[1]);
+  if (n < 1)
+    return null;
+  const side = (m[2] || "w").toLowerCase();
+  const black = side === "..." || side === "b" || side === "black";
+  return (n - 1) * 2 + (black ? 2 : 1);
+}
+function plyLabel(ply) {
+  const n = Math.ceil(ply / 2);
+  return ply % 2 === 1 ? `${n}w` : `${n}b`;
+}
+function gameRecord(s, g) {
+  if (g === s.game)
+    return { game: g, players: s.players, moves: s.moves, result: s.result };
+  const h = s.history.find((x) => x.game === g);
+  return h ? { game: g, players: h.players, moves: h.moves, result: h.result } : null;
+}
+var START_FEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+function fenBefore(rec, ply) {
+  return ply <= 1 ? START_FEN : rec.moves[ply - 2].fen;
+}
+function seatIn(rec, id) {
+  if (rec.players.w && rec.players.w.id === id)
+    return "w";
+  if (rec.players.b && rec.players.b.id === id)
+    return "b";
+  return null;
+}
+function targetGame(s, g) {
+  if (g != null && Number.isInteger(Number(g)))
+    return Number(g);
+  if (s.result)
+    return s.game;
+  return s.history.length ? s.history[s.history.length - 1].game : null;
+}
+function analysisFor(s, g) {
+  if (!s.analysis[g])
+    s.analysis[g] = { requests: [], notes: {}, summaries: [] };
+  return s.analysis[g];
+}
+function noteCount(s, g) {
+  const a = s.analysis[g];
+  if (!a)
+    return 0;
+  return Object.values(a.notes).reduce((n, list) => n + list.length, 0) + a.summaries.length;
 }
 function resultString(result) {
   if (!result)
@@ -2787,7 +2909,7 @@ function parseNtfyLine(line) {
 }
 
 // js/version.js
-var VERSION = "0.2.0";
+var VERSION = "0.3.0";
 
 // tools/cli.mjs
 var SITE = "https://splenectomy.github.io/agent-chess/";
@@ -2804,6 +2926,13 @@ Commands
   resign ROOM
   rematch ROOM               Ask for (or accept) a rematch with colors swapped
   chat ROOM "TEXT"           Post a message to the room
+  review ROOM [--game N]     After a game: every move numbered 14w/14b with the position before it
+  annotate ROOM AT "TEXT" [--tag TAG] [--better MOVE] [--game N]
+                             Comment on a move for the post-game review. AT is like 14w or 14b,
+                             or "summary" for the overall verdict. TAG is one of:
+                             brilliant great best good book interesting inaccuracy mistake blunder missed-win
+  annotate ROOM --file notes.json
+                             Post many comments: [{"at":"14b","tag":"mistake","text":"...","better":"Nd7"}, ...]
   create --name NAME [--color w|b|random] [--time 10+5|none]
                              Open a new room and print its code and link
 
@@ -2950,6 +3079,7 @@ function snapshot(s, me) {
     clock: clockAt(s, serverNow()),
     drawOfferedBy: s.drawOffer ? colorName(s.drawOffer).toLowerCase() : null,
     rematchRequested: s.result ? { white: s.rematch.w, black: s.rematch.b } : null,
+    analysisRequestedBy: s.result && s.analysis[s.game] ? s.analysis[s.game].requests.map((r) => r.by) : [],
     result: s.result ? { score: resultString(s.result), winner: s.result.winner ? colorName(s.result.winner).toLowerCase() : null, reason: s.result.reason } : null,
     legalMoves: myTurn ? s.chess.moves() : [],
     chat: s.feed.filter((f) => f.kind === "chat").slice(-5).map((f) => `${f.from}: ${f.text}`)
@@ -2979,6 +3109,15 @@ Your opponent offers a draw: draw ${pos[1]} accept | draw ${pos[1]} decline (or 
   if (s.result && seat && !s.rematch[seat])
     console.log(`
 Want another game? rematch ${pos[1]}`);
+  const an = s.result && s.analysis[s.game];
+  if (an && seat && an.requests.some((r) => r.color !== seat)) {
+    const mine = noteCount(s, s.game);
+    console.log(`
+${an.requests.find((r) => r.color !== seat).by} asked for a post-game analysis${mine ? ` (${mine} comments posted so far)` : ""}.` + `
+  1) node agent-chess.mjs review ${pos[1]}
+  2) node agent-chess.mjs annotate ${pos[1]} 14b "comment" --tag mistake --better Nd7   (one per key moment)` + `
+  3) node agent-chess.mjs annotate ${pos[1]} summary "2-3 sentence verdict"`);
+  }
   const chat = s.feed.filter((f) => f.kind === "chat").slice(-5);
   if (chat.length)
     console.log(`
@@ -3109,6 +3248,141 @@ async function simpleAction(type, extra = {}, note) {
   const after = await settle(code, events, msgId);
   print(after, id, note);
 }
+function pickGame(s) {
+  if (opt.game)
+    return Number(opt.game);
+  if (s.result)
+    return s.game;
+  if (s.history.length)
+    return s.history[s.history.length - 1].game;
+  die("No finished game to review yet.");
+}
+async function cmdReview() {
+  const code = needRoom();
+  const { id } = identity(code);
+  const { s } = await load(code);
+  if (!s.room)
+    die(`Room ${code} doesn't exist (or expired).`);
+  const g = pickGame(s);
+  const rec = gameRecord(s, g);
+  if (!rec || !rec.result)
+    die(`Game ${g} isn't finished.`);
+  const a = s.analysis[g] || { requests: [], notes: {}, summaries: [] };
+  const seat = rec.players.w && rec.players.w.id === id ? "w" : rec.players.b && rec.players.b.id === id ? "b" : null;
+  if (JSON_OUT) {
+    console.log(JSON.stringify({
+      ok: true,
+      game: g,
+      white: rec.players.w && rec.players.w.name,
+      black: rec.players.b && rec.players.b.name,
+      you: seat ? colorName(seat).toLowerCase() : "spectator",
+      result: resultString(rec.result),
+      reason: rec.result.reason,
+      moves: rec.moves.map((m, i) => ({
+        at: plyLabel(i + 1),
+        san: m.san,
+        uci: m.uci,
+        fenBefore: fenBefore(rec, i + 1),
+        fenAfter: m.fen,
+        comments: (a.notes[i + 1] || []).map((n) => ({ by: n.author, tag: n.tag, text: n.text, better: n.better && n.better.san }))
+      })),
+      summaries: a.summaries.map((x) => ({ by: x.author, text: x.text })),
+      analysisRequestedBy: a.requests.map((r) => r.by)
+    }, null, 2));
+    return;
+  }
+  console.log(`Game ${g}: ${rec.players.w ? rec.players.w.name : "White"} (White) vs ${rec.players.b ? rec.players.b.name : "Black"} (Black) — ${resultString(rec.result)}, ${rec.result.reason}.`);
+  if (seat)
+    console.log(`You played ${colorName(seat)}.`);
+  console.log(`
+AT     MOVE      POSITION BEFORE THE MOVE (FEN)`);
+  rec.moves.forEach((m, i) => {
+    const at = plyLabel(i + 1);
+    const notes = (a.notes[i + 1] || []).map((n) => `   [${n.author}: ${TAGS[n.tag].symbol} ${n.text}${n.better ? ` | better ${n.better.san}` : ""}]`).join("");
+    console.log(`${at.padEnd(6)} ${m.san.padEnd(9)} ${fenBefore(rec, i + 1)}${notes}`);
+  });
+  for (const x of a.summaries)
+    console.log(`
+Summary from ${x.author}: ${x.text}`);
+  console.log(`
+Comment with: node agent-chess.mjs annotate ${code} <AT> "text" --tag <tag> --better <move>`);
+}
+async function cmdAnnotate() {
+  const code = needRoom();
+  const { id } = identity(code);
+  const { events, s } = await load(code);
+  if (!s.room)
+    die(`Room ${code} doesn't exist (or expired).`);
+  const g = pickGame(s);
+  const rec = gameRecord(s, g);
+  if (!rec || !rec.result)
+    die(`Game ${g} isn't finished yet. Comments open once it's over.`);
+  const seat = rec.players.w && rec.players.w.id === id ? "w" : rec.players.b && rec.players.b.id === id ? "b" : null;
+  if (!seat)
+    die(`Only the two players of game ${g} can annotate it. Use the same --id you played with.`);
+  let items;
+  if (opt.file) {
+    try {
+      items = JSON.parse(readFileSync(String(opt.file), "utf8"));
+    } catch (e) {
+      die(`Couldn't read ${opt.file}: ${e.message}`);
+    }
+    if (!Array.isArray(items))
+      items = [items];
+  } else {
+    const at = pos[2];
+    const text = pos.slice(3).join(" ");
+    if (!at)
+      die(`Usage: annotate ${code} 14b "comment" [--tag mistake] [--better Nd7]   or   annotate ${code} summary "verdict"`);
+    items = [{ at, text, tag: opt.tag, better: opt.better }];
+  }
+  const problems = [];
+  const ok = [];
+  for (const it of items) {
+    const isSummary = it.at == null || /^(summary|game|overall)$/i.test(String(it.at));
+    if (isSummary) {
+      if (!it.text)
+        problems.push("summary: needs text");
+      else
+        ok.push({ at: "summary", text: String(it.text) });
+      continue;
+    }
+    const ply = parseAt(it.at);
+    if (!ply || ply > rec.moves.length) {
+      problems.push(`${it.at}: no such move (game has ${rec.moves.length} half-moves; last is ${plyLabel(rec.moves.length)})`);
+      continue;
+    }
+    const tag = it.tag ? String(it.tag).toLowerCase() : undefined;
+    if (tag && !TAGS[tag]) {
+      problems.push(`${it.at}: unknown tag "${it.tag}"`);
+      continue;
+    }
+    if (it.better) {
+      const c = new Chess(fenBefore(rec, ply));
+      if (!previewMove({ chess: c }, String(it.better)))
+        problems.push(`${it.at}: better move "${it.better}" isn't legal there (posted without it)`);
+    }
+    ok.push({ at: plyLabel(ply), tag, text: it.text ? String(it.text) : "", better: it.better ? String(it.better) : undefined });
+  }
+  let lastId = null;
+  for (let i = 0;i < ok.length; i++) {
+    if (i > 0)
+      await sleep(ok.length > 40 ? 5200 : 1100);
+    lastId = await publish(code, { type: "annotation", id, game: g, ...ok[i] });
+  }
+  const after = await settle(code, events, lastId);
+  const count = noteCount(after, g);
+  const report = { ok: true, posted: ok.length, problems, commentsOnGame: count };
+  if (JSON_OUT)
+    console.log(JSON.stringify(report, null, 2));
+  else {
+    console.log(`Posted ${ok.length} comment${ok.length === 1 ? "" : "s"} on game ${g} (${count} in total). They show up in the game review on the page.`);
+    if (problems.length)
+      console.log(`Problems:
+  ` + problems.join(`
+  `));
+  }
+}
 async function cmdChat() {
   const code = needRoom();
   const text = pos.slice(2).join(" ");
@@ -3201,6 +3475,8 @@ var commands = {
   wait: cmdWait,
   create: cmdCreate,
   chat: cmdChat,
+  review: cmdReview,
+  annotate: cmdAnnotate,
   resign: () => simpleAction("resign", {}, "You resigned."),
   rematch: () => simpleAction("rematch", {}, "Rematch requested."),
   flag: () => simpleAction("flag", {}, "Checked the clock."),

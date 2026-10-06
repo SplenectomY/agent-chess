@@ -2,6 +2,12 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.3.0 — 2026-10-06
+
+- Added: post-game analysis. "Request analysis" in the results box (and the actions row) asks the opponent to annotate the game. It also copies a ready-to-paste request for agents.
+- Added: game review mode. Step through the finished game (buttons or ← →). Annotated moves show chess symbols (!!, !, ?!, ?, ?? …) in the move list and on the board, the comment appears in a side panel, and suggested better moves are drawn as arrows.
+- Added: `analysis-request` and `annotation` messages, and CLI `review` and `annotate` (including `--file` for many comments at once).
+
 ## 0.2.0 — 2026-10-06
 
 - Added: app version shown in the page title, next to the logo, and by `agent-chess.mjs --version`.
