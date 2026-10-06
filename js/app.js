@@ -407,7 +407,7 @@ function renderBars() {
     const bar = $(slot);
     bar.replaceChildren(
       el('div', { class: 'pb-who' },
-        el('span', { class: 'pb-name', text: name }),
+        el('span', { class: 'pb-name' }, el('span', { class: `pb-swatch pb-swatch-inline ${color}`, 'aria-hidden': 'true' }), name),
         el('span', { class: 'pb-meta' }, el('span', { class: `pb-swatch ${color}` }), G.colorName(color))),
       el('div', { class: 'pb-captures', 'data-color': color, role: 'img' }),
       el('div', { class: 'clock' + (s.clock ? '' : ' untimed'), 'data-color': color, role: 'timer', 'aria-label': `${G.colorName(color)} clock` },
@@ -1034,7 +1034,7 @@ function renderReview() {
 
   const body = [];
   if (ply === 0) {
-    body.push(el('p', { class: 'rv-where', text: 'Starting position' }));
+    body.push(el('p', { class: 'rv-where', text: 'Starting position' })); // replaced below by the header row
   } else {
     body.push(el('p', { class: 'rv-where', text: G.moveLabel(ply, move.san) + ` · ${G.colorName(move.color)}` }));
   }
@@ -1072,6 +1072,16 @@ function renderReview() {
 
   const nav = (label, text, to, disabled) =>
     el('button', { class: 'btn nav', type: 'button', 'aria-label': label, title: label, text, disabled, onclick: () => stepReview(to) });
+  // Header row: the move on the left, compact ◀ ▶ » controls on the right (shown on mobile;
+  // desktop keeps the full button row below).
+  const whereText = ply === 0 ? 'Starting position' : G.moveLabel(ply, move.san) + ` · ${G.colorName(move.color)}`;
+  const hasNext = plies.some((p) => p > ply);
+  body[0] = el('div', { class: 'rv-top' },
+    el('p', { class: 'rv-where', text: whereText }),
+    el('div', { class: 'rv-mininav' },
+      el('button', { class: 'mini', type: 'button', 'aria-label': 'Previous move', title: 'Previous move', text: '◀', disabled: ply === 0, onclick: () => stepReview(ply - 1) }),
+      el('button', { class: 'mini', type: 'button', 'aria-label': 'Next move', title: 'Next move', text: '▶', disabled: ply >= total, onclick: () => stepReview(ply + 1) }),
+      el('button', { class: 'mini', type: 'button', 'aria-label': 'Next comment', title: 'Next comment', text: '»', disabled: !hasNext, onclick: () => nextNoted(1) })));
   panel.replaceChildren(
     el('div', { class: 'panel-head rv-head' },
       el('h2', { text: `Game review${plies.length || a.summaries.length ? ` · ${G.noteCount(s, R.review.game)} comment${G.noteCount(s, R.review.game) === 1 ? '' : 's'}` : ''}` }),

@@ -2,6 +2,15 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.6.5 — 2026-10-06
+
+Mobile/stacked layout polish, so the board and the review box fit on one phone screen:
+
+- Review: small ◀ ▶ » (next comment) buttons sit in the top-right, across from the move header. Close review stays at the bottom.
+- Player bars: one line each. The color swatch is beside the name, then the captured pieces, then a clock at the same size as the name (it was 1.5–2.4rem). The "White"/"Black" label is hidden on phones.
+- Top bar: one line (41 px instead of about 110 px), down to 360 px wide.
+- Desktop layout unchanged.
+
 ## 0.6.4 — 2026-10-06
 
 From Claude Sonnet's game: the analysis request arrived 5 s after mate, before the agent started `wait --any`, so the wait never saw it.

@@ -391,14 +391,38 @@ details.panel[open] summary { margin-bottom: 10px; }
 
 /* Review panel: compact on stacked (mobile/tablet) layouts. */
 .rv-close-bottom { display: none; }
+.rv-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.rv-top .rv-where { margin-bottom: 8px; }
+.rv-mininav { display: none; gap: 4px; flex: 0 0 auto; }
+.rv-mininav .mini {
+  width: 32px; height: 28px; padding: 0; border: 1.5px solid var(--ink); background: transparent; color: inherit;
+  font: inherit; font-size: .8rem; line-height: 1; cursor: pointer; display: grid; place-items: center;
+}
+.rv-mininav .mini:last-child { font-size: 1.05rem; font-weight: 800; }
+.rv-mininav .mini:disabled { opacity: .35; cursor: default; }
+.rv-mininav .mini:not(:disabled):hover { background: color-mix(in srgb, var(--ink) 10%, transparent); }
+.pb-swatch-inline { display: none; }
 .nav-end { display: contents; }
 @media (max-width: 900px) {
   .review-panel { padding: 12px 14px; }
   .review-panel .rv-head, .review-panel .rv-tip, .review-panel .rv-by, .review-panel .nav-end { display: none; }
   .rv-where { font-size: 1.05rem; margin-bottom: 6px; }
-  .rv-nav { flex-wrap: nowrap; margin-top: 8px; }
-  .rv-nav .btn { flex: 1 1 0; min-width: 0; padding: 6px 8px; }
-  .rv-nav .btn:last-child { flex: 2 1 0; white-space: nowrap; }
+  .rv-nav { display: none; }
+  .rv-mininav { display: flex; }
+  .rv-top { margin-bottom: 2px; }
+  .rv-top .rv-where { margin: 0; }
+  .rv-note { padding-top: 6px; margin-bottom: 4px; }
+
+  /* One tidy line per player: swatch + name, captures, a clock at the same size as the name. */
+  .player-bar { align-items: center; gap: 8px; }
+  .pb-meta { display: none; }
+  .pb-swatch-inline { display: inline-block; flex: 0 0 auto; width: 11px; height: 11px; margin-right: 7px; }
+  .pb-name { display: flex; align-items: center; font-size: 1rem; }
+  .clock { font-size: 1rem; padding: 4px 9px 4px 13px; min-width: 0; letter-spacing: 0; }
+  .clock::before { width: 5px; }
+  .clock.untimed { font-size: .85rem; padding: 4px 9px; }
+  .cap-piece { font-size: 15px; }
+  .cap-lead { font-size: .85rem; }
   .rv-close-bottom { display: flex; width: 100%; margin-top: 10px; min-height: 38px; }
 }
 @media (max-width: 900px) {
@@ -411,10 +435,23 @@ details.panel[open] summary { margin-bottom: 10px; }
   .topbar { padding: 10px 16px; }
   .lobby { padding: 28px 16px 48px; }
   .tc-grid { grid-template-columns: repeat(2, 1fr); }
-  .clock { font-size: 1.5rem; padding: 8px 12px 8px 18px; }
   .panel { padding: 14px; }
   .room-label { display: none; }
   .conn { font-size: 0; gap: 0; }
+  /* One-line top bar on phones. */
+  .topbar { padding: 8px 12px; gap: 8px; flex-wrap: nowrap; }
+  .brand { font-size: .98rem; gap: 7px; }
+  .brand-mark { width: 16px; height: 16px; }
+  .app-version { font-size: .7rem; }
+  .topbar-right { flex-wrap: nowrap; gap: 8px; }
+  .topbar-room { flex-wrap: nowrap; gap: 6px; }
+  .room-code { font-size: .85rem; padding: 1px 6px; letter-spacing: .04em; }
+  .style-menu summary { padding: 1px 7px; font-size: .85rem; white-space: nowrap; }
+}
+@media (max-width: 380px) {
+  .brand-mark { display: none; }
+  .topbar { padding: 8px 10px; }
+  .brand { font-size: .92rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
