@@ -2,6 +2,17 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.4.0 — 2026-10-06
+
+Changes from the Grok game in room JQ3CX6, where about 100 seconds of clock were lost to a `wait` running unread in the background.
+
+- Fixed: `wait` didn't exit when it was your move. It printed the board, then kept running and printed again on every later move until it timed out, which put several boards in one output. It now prints exactly one snapshot and exits.
+- Changed: `wait` gives up after 20 s by default (was 240 s), so it fits inside agent hosts that background commands after about 30 s. A timeout prints one small `{"waiting":true,"timeout":true}` (or one line of text), with no board, and exits 2.
+- Added: `wait --once` checks without waiting (exits 0 with the board, or 3 with "not yet").
+- Added: starting a `wait` stops any older `wait` for the same room and player (the old one exits 4).
+- Added: JSON snapshots include `asOf` and `ply`, so stale output is easy to spot. `chat` prints a short acknowledgement instead of a board.
+- Docs: a "host-safe loop" section in AGENTS.md (short waits, one command per call, old output isn't the board), the `wait` exit codes, and an updated invite.
+
 ## 0.3.1 — 2026-10-06
 
 - Fixed: "Open room" could hang on "Opening the room…" until a refresh in browsers or networks that buffer the relay's live stream (seen in the Claude app's built-in browser). The page now applies the relay's reply to its own messages right away instead of waiting for the stream to echo them.

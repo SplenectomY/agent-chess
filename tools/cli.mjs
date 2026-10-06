@@ -1,9 +1,9 @@
 // Agent Chess command-line client. Source for ../agent-chess.mjs (bundled by tools/build.sh).
 // Zero dependencies at runtime: needs Node 18+ (built-in fetch).
 
-import { homedir } from 'node:os';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import * as G from '../js/game.js';
 import { Chess } from '../vendor/chess.js';
@@ -18,7 +18,11 @@ Usage: node agent-chess.mjs <command> [ROOM] [args] [options]
 Commands
   state ROOM                 Show the board, clocks, whose move it is and your legal moves
   join ROOM --name NAME      Take the open seat in a room
-  wait ROOM [--timeout S]    Block until it's your move or the game ends (default 240 s), then show state
+  wait ROOM [--timeout S]    Wait until it's your move, the game ends or a draw is offered, then show
+                             the board once and exit 0. Gives up after S seconds (default 20) with a
+                             one-line "not yet" and exit 2: just run it again. Starting a new wait
+                             stops any older one for the same room.
+  wait ROOM --once           Check once without waiting: the board (exit 0) or "not yet" (exit 3)
   move ROOM MOVE             Play a move: SAN (Nf3, exd5, O-O, e8=Q) or UCI (g1f3, e7e8q)
   draw ROOM offer|accept|decline
   resign ROOM
@@ -152,6 +156,8 @@ function snapshot(s, me) {
   const myTurn = G.isActive(s) && seat === G.turn(s);
   return {
     ok: true,
+    asOf: new Date().toISOString(),
+    ply: s.moves.length,
     room: s.room ? { timeControl: G.describeTimeControl(s.room.tc) } : null,
     game: s.game,
     you: seat ? G.colorName(seat).toLowerCase() : 'spectator',
@@ -411,15 +417,57 @@ async function cmdChat() {
   if (!text) die('Nothing to say.');
   const { id, name } = identity(code, { create: true });
   const msgId = await publish(code, { type: 'chat', id, name: name || 'Agent', text });
-  const after = await settle(code, [], msgId);
-  print(after, id, 'Message sent.');
+  await settle(code, [], msgId);
+  // Deliberately not a board: chat output should never be mistaken for a turn.
+  if (JSON_OUT) console.log(JSON.stringify({ ok: true, sent: 'chat' }));
+  else console.log('Message sent.');
+}
+
+// Exit only after stdout has been flushed (pipes can be asynchronous, e.g. on macOS).
+function exitAfterFlush(code) {
+  process.stdout.write('', () => process.exit(code));
+  return new Promise(() => {}); // never resolves: nothing else runs after this
+}
+
+// Only one `wait` per room and player: a new one replaces any older one still running,
+// so two waits can never race or leave a stale board in a background log.
+function claimWaitLock(code, id) {
+  const file = join(tmpdir(), `agent-chess-wait-${code}-${String(id).replace(/[^\w-]/g, '_')}.pid`);
+  try {
+    const old = Number(readFileSync(file, 'utf8'));
+    if (old && old !== process.pid) {
+      try { process.kill(old, 'SIGTERM'); } catch { /* already gone */ }
+    }
+  } catch { /* no lock yet */ }
+  try { writeFileSync(file, String(process.pid)); } catch { /* best effort */ }
+  const release = () => {
+    try { if (Number(readFileSync(file, 'utf8')) === process.pid) unlinkSync(file); } catch { /* ignore */ }
+  };
+  process.on('exit', release);
+  process.on('SIGTERM', () => {
+    process.stderr.write('wait: replaced by a newer wait for this room. Ignore anything this one printed.\n');
+    process.exit(4);
+  });
+}
+
+function printWaiting(s, timedOut, waitedMs) {
+  if (JSON_OUT) {
+    const o = { ok: true, waiting: true, yourMove: false, asOf: new Date().toISOString(), ply: s.moves.length };
+    if (timedOut) o.timeout = true;
+    console.log(JSON.stringify(o));
+  } else {
+    console.log(timedOut
+      ? `Not your move yet (waited ${Math.round(waitedMs / 1000)} s). Run wait again.`
+      : 'Not your move yet. Run wait again.');
+  }
 }
 
 async function cmdWait() {
   const code = needRoom();
   const { id } = identity(code);
-  const timeoutMs = Math.max(5, Number(opt.timeout) || 240) * 1000;
-  const deadline = Date.now() + timeoutMs;
+  const timeoutMs = Math.max(5, Number(opt.timeout) || 20) * 1000;
+  const started = Date.now();
+  const deadline = started + timeoutMs;
   const events = await poll(code);
   let s = G.replay(events);
   needSeat(s, id, code);
@@ -430,30 +478,43 @@ async function cmdWait() {
     if (s.drawOffer && s.drawOffer !== seat) return true;
     return false;
   };
-  if (done()) return print(s, id);
+  if (done()) {
+    print(s, id);
+    return exitAfterFlush(0);
+  }
+  if (opt.once) {
+    printWaiting(s, false);
+    return exitAfterFlush(3);
+  }
+  claimWaitLock(code, id);
 
   const seen = new Set(events.map((e) => e.id));
   let flagKey = null;
-  while (Date.now() < deadline) {
+  let finished = false;
+  const flagTimer = setInterval(() => {
+    // Claim a win on time if the opponent's clock runs out while we wait.
+    const clk = G.clockAt(s, serverNow());
+    const key = `${s.game}:${s.moves.length}`;
+    if (clk && G.isActive(s) && clk[G.turn(s)] < -(G.GRACE_MS + 1500) && flagKey !== key) {
+      flagKey = key;
+      publish(code, { type: 'flag', id, game: s.game }).catch(() => {});
+    }
+  }, 1000);
+
+  while (!finished && Date.now() < deadline) {
     const ctrl = new AbortController();
     const since = events.length ? events[events.length - 1].id : 'all';
-    const timer = setTimeout(() => ctrl.abort(), Math.min(deadline - Date.now(), 60000));
-    // Claim a win on time if the opponent's clock runs out while we wait.
-    const flagTimer = setInterval(() => {
-      const clk = G.clockAt(s, serverNow());
-      const key = `${s.game}:${s.moves.length}`;
-      if (clk && G.isActive(s) && clk[G.turn(s)] < -(G.GRACE_MS + 1500) && flagKey !== key) {
-        flagKey = key;
-        publish(code, { type: 'flag', id, game: s.game }).catch(() => {});
-      }
-    }, 1000);
+    const timer = setTimeout(() => ctrl.abort(), Math.max(0, Math.min(deadline - Date.now(), 60000)));
     try {
       const res = await fetch(`${topicUrl(code)}/json?since=${encodeURIComponent(since)}`, { signal: ctrl.signal });
       if (!res.ok) { await sleep(res.status === 429 ? 6000 : 2000); continue; }
+      const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
-      for await (const chunk of res.body) {
-        buf += decoder.decode(chunk, { stream: true });
+      while (!finished) {
+        const { value, done: eof } = await reader.read();
+        if (eof) break;
+        buf += decoder.decode(value, { stream: true });
         let nl;
         while ((nl = buf.indexOf('\n')) >= 0) {
           const line = buf.slice(0, nl);
@@ -463,24 +524,25 @@ async function cmdWait() {
           seen.add(ev.id);
           events.push(ev);
           offset = ev.time + 500 - Date.now();
-          s = G.replay(events);
-          if (done()) {
-            ctrl.abort();
-            clearInterval(flagTimer);
-            clearTimeout(timer);
-            return print(s, id);
-          }
         }
+        // Apply everything received so far, then decide once.
+        s = G.replay(events);
+        if (done()) finished = true;
       }
     } catch (e) {
       if (e.name !== 'AbortError') await sleep(2000);
     } finally {
       clearTimeout(timer);
-      clearInterval(flagTimer);
+      ctrl.abort();
     }
   }
-  print(s, id, `Still waiting after ${Math.round(timeoutMs / 1000)} s. Run wait again.`);
-  process.exit(2);
+  clearInterval(flagTimer);
+  if (finished) {
+    print(s, id); // exactly one snapshot, then the process ends
+    return exitAfterFlush(0);
+  }
+  printWaiting(s, true, Date.now() - started);
+  return exitAfterFlush(2);
 }
 
 const commands = {
