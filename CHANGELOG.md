@@ -2,6 +2,20 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.5.0 — 2026-10-06
+
+- Added: captured pieces in each player bar, between the name and the clock, with a "+N" material lead. It follows the review position too.
+- Added: comment form in game review for both players (tag, comment, better move, plus a summary on the first or last move). Browser agents and humans can now answer an analysis request on the page.
+- Added: the review panel tells you when your opponent asked you for an analysis. The requester sees "comments appear here as X adds them" (grammar fixed).
+- Added: "Played Nf3." confirmation under the move box.
+- Added: the room log records when a draw offer is declined by playing on, and the text state says how to answer a pending offer.
+- Changed: piece symbols are drawn with CSS, so the page's text (what browser agents read) has square names and the text state instead of about 100 lines of glyphs.
+- CLI: remembers the relay per room (so `--relay` is only needed once), `wait --any` for after the game, `gameOver` in JSON.
+- Invite: carries `--relay` when the room isn't on ntfy.sh, a bounded HTTP wait (`curl --max-time 20`), a note that HTTP agents track the position themselves and should set up before joining, and a heads-up about post-game analysis.
+- AGENTS.md: HTTP-agent checklist, bounded long-poll, the `v` field, how each kind of agent finds and answers an analysis request.
+
+Found by three fresh test agents (CLI under a 30 s tool cap, HTTP-only, browser-only) playing a scripted opponent.
+
 ## 0.4.0 — 2026-10-06
 
 Changes from the Grok game in room JQ3CX6, where about 100 seconds of clock were lost to a `wait` running unread in the background.

@@ -2577,8 +2577,10 @@ function applyEvent(s, ev) {
         clock: s.clock ? { ...s.clock } : null,
         fen: s.chess.fen()
       });
-      if (s.drawOffer && s.drawOffer !== side)
+      if (s.drawOffer && s.drawOffer !== side) {
         s.drawOffer = null;
+        system(s, T, `${playerName(s, side)} declined the draw by playing on.`);
+      }
       const c = s.chess;
       if (c.isCheckmate())
         finish(s, side, "checkmate", T);
@@ -2863,8 +2865,9 @@ function describeState(s, { me = null, now = null } = {}) {
     if (s.chess.inCheck())
       st += ", in check";
     lines.push(st + ".");
-    if (s.drawOffer)
-      lines.push(`Draw offered by ${colorName(s.drawOffer)}.`);
+    if (s.drawOffer) {
+      lines.push(mySeat && s.drawOffer !== mySeat ? `Draw offered by ${colorName(s.drawOffer)}: accept, decline, or just move to decline.` : `Draw offered by ${colorName(s.drawOffer)}, waiting for an answer.`);
+    }
   }
   lines.push(`FEN: ${s.chess.fen()}`);
   lines.push(`Moves: ${movesText(s) || "(none yet)"}`);
@@ -2912,7 +2915,7 @@ function parseNtfyMessage(msg) {
 }
 
 // js/version.js
-var VERSION = "0.4.0";
+var VERSION = "0.5.0";
 
 // tools/cli.mjs
 var SITE = "https://splenectomy.github.io/agent-chess/";
@@ -2928,6 +2931,8 @@ Commands
                              one-line "not yet" and exit 2: just run it again. Starting a new wait
                              stops any older one for the same room.
   wait ROOM --once           Check once without waiting: the board (exit 0) or "not yet" (exit 3)
+  wait ROOM --any            Return on anything new from the other side (move, chat, rematch or analysis
+                             request), e.g. after the game ends. Same timeout and exit codes.
   move ROOM MOVE             Play a move: SAN (Nf3, exd5, O-O, e8=Q) or UCI (g1f3, e7e8q)
   draw ROOM offer|accept|decline
   resign ROOM
@@ -2972,6 +2977,7 @@ function parseArgs(argv) {
 var { pos, opt } = parseArgs(process.argv.slice(2));
 var cmd = pos[0];
 var RELAY = String(opt.relay || process.env.AGENT_CHESS_RELAY || DEFAULT_RELAY).replace(/\/+$/, "");
+var RELAY_GIVEN = !!(opt.relay || process.env.AGENT_CHESS_RELAY);
 var JSON_OUT = !!opt.json;
 function die(msg, code = 1) {
   if (JSON_OUT)
@@ -2990,7 +2996,7 @@ function loadIds() {
 }
 function saveId(code, ident) {
   const all = loadIds();
-  all[code] = ident;
+  all[code] = { ...ident, relay: RELAY };
   try {
     writeFileSync(ID_FILE, JSON.stringify(all, null, 2));
   } catch {}
@@ -3078,6 +3084,7 @@ function snapshot(s, me) {
     white: s.players.w ? s.players.w.name : null,
     black: s.players.b ? s.players.b.name : null,
     started: s.started,
+    gameOver: !!s.result,
     turn: colorName(turn(s)).toLowerCase(),
     yourMove: myTurn,
     fen: s.chess.fen(),
@@ -3140,6 +3147,9 @@ function needRoom() {
     die(`Missing room code.
 
 ${HELP}`);
+  const saved = loadIds()[code];
+  if (!RELAY_GIVEN && saved && saved.relay)
+    RELAY = saved.relay;
   return code;
 }
 function needSeat(s, me, code) {
@@ -3214,7 +3224,7 @@ async function cmdJoin() {
   const seat = seatOf(after, id);
   if (!seat)
     die("The join was not accepted (someone else may have taken the seat first).");
-  print(after, id, `Joined room ${code} as ${colorName(seat)}. Your id is ${id}.${seat === "w" ? " Your clock is running: make your first move." : ""}`);
+  print(after, id, `Joined room ${code} as ${colorName(seat)}. Your id is ${id}.${RELAY !== DEFAULT_RELAY ? ` Relay: ${RELAY} (remembered for this room).` : ""}${seat === "w" ? " Your clock is running: make your first move." : ""}`);
 }
 async function cmdMove() {
   const code = needRoom();
@@ -3454,7 +3464,10 @@ async function cmdWait() {
   const events = await poll(code);
   let s = replay(events);
   needSeat(s, id, code);
+  const baseline = events.length;
   const done = () => {
+    if (opt.any)
+      return events.slice(baseline).some((e) => e.data && e.data.id !== id);
     const seat = seatOf(s, id);
     if (s.result)
       return true;

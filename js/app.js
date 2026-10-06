@@ -65,10 +65,59 @@ async function copy(text, what = 'Copied') {
   }
   toast(what);
 }
+// Glyphs are drawn with CSS (content: attr(data-g)) so they never show up in the page's
+// text: agents reading the page get square names and the text state, not symbol noise.
 function pieceNode(color, type, cls = 'piece') {
   return el('span', { class: `${cls} ${color}`, 'aria-hidden': 'true' },
-    el('span', { class: 'fill', text: GLYPH[type] + VS }),
-    el('span', { class: 'outline', text: (color === 'w' ? OUTLINE[type] : GLYPH[type]) + VS }));
+    el('span', { class: 'fill', 'data-g': GLYPH[type] + VS }),
+    el('span', { class: 'outline', 'data-g': (color === 'w' ? OUTLINE[type] : GLYPH[type]) + VS }));
+}
+
+// ---------- captured pieces ----------
+const START_COUNT = { p: 8, n: 2, b: 2, r: 2, q: 1 };
+const VALUE = { p: 1, n: 3, b: 3, r: 5, q: 9 };
+const CAPTURE_ORDER = ['p', 'n', 'b', 'r', 'q'];
+function materialSummary(chess) {
+  const count = { w: { p: 0, n: 0, b: 0, r: 0, q: 0 }, b: { p: 0, n: 0, b: 0, r: 0, q: 0 } };
+  let wv = 0;
+  let bv = 0;
+  for (const row of chess.board()) {
+    for (const sq of row) {
+      if (!sq || sq.type === 'k') continue;
+      count[sq.color][sq.type]++;
+      if (sq.color === 'w') wv += VALUE[sq.type];
+      else bv += VALUE[sq.type];
+    }
+  }
+  // Pieces each side has taken = the opponent's missing pieces (promotions can't go below zero).
+  const taken = (by) => {
+    const victim = by === 'w' ? 'b' : 'w';
+    const list = [];
+    for (const t of CAPTURE_ORDER) for (let i = 0; i < Math.max(0, START_COUNT[t] - count[victim][t]); i++) list.push(t);
+    return list;
+  };
+  return { w: taken('w'), b: taken('b'), lead: wv - bv };
+}
+function renderCaptures(chess) {
+  const m = materialSummary(chess);
+  document.querySelectorAll('.pb-captures[data-color]').forEach((box) => {
+    const c = box.dataset.color;
+    const victim = c === 'w' ? 'b' : 'w';
+    const list = m[c];
+    const lead = c === 'w' ? m.lead : -m.lead;
+    const groups = [];
+    let cur = null;
+    for (const t of list) {
+      if (!cur || cur.type !== t) groups.push((cur = { type: t, n: 0 }));
+      cur.n++;
+    }
+    const words = groups.map((g) => `${g.n > 1 ? g.n + ' ' : ''}${PIECE_NAME[g.type]}${g.n > 1 ? 's' : ''}`).join(', ');
+    box.setAttribute('aria-label', list.length ? `Captured by ${G.colorName(c)}: ${words}${lead > 0 ? `, up ${lead}` : ''}` : `${G.colorName(c)} has captured nothing`);
+    box.replaceChildren(
+      ...groups.map((g) => el('span', { class: 'cap-group' }, ...Array.from({ length: g.n }, () => pieceNode(victim, g.type, 'cap-piece')))),
+      ...(lead > 0 ? [el('span', { class: 'cap-lead', text: `+${lead}` })] : []),
+    );
+  });
 }
 
 // ---------- sound (a soft click on each move) ----------
@@ -309,6 +358,7 @@ function renderBars() {
       el('div', { class: 'pb-who' },
         el('span', { class: 'pb-name', text: name }),
         el('span', { class: 'pb-meta' }, el('span', { class: `pb-swatch ${color}` }), G.colorName(color))),
+      el('div', { class: 'pb-captures', 'data-color': color, role: 'img' }),
       el('div', { class: 'clock' + (s.clock ? '' : ' untimed'), 'data-color': color, role: 'timer', 'aria-label': `${G.colorName(color)} clock` },
         s.clock ? '' : 'No clock'),
     );
@@ -410,6 +460,7 @@ function renderBoard() {
     }
   }
   board.replaceChildren(...squares);
+  renderCaptures(chess);
   // Keep one square in the tab order for keyboard users.
   const focusSq = board.querySelector('.sq.sel') || board.querySelector('.sq.movable') || board.firstChild;
   if (focusSq) focusSq.tabIndex = 0;
@@ -489,6 +540,7 @@ async function sendMove(text) {
   const s = R.s;
   const err = $('move-error');
   err.textContent = '';
+  $('move-note').textContent = '';
   if (!canMove()) {
     err.textContent = G.isActive(s) ? "It isn't your move." : 'The game is not in progress.';
     return false;
@@ -505,6 +557,7 @@ async function sendMove(text) {
   renderStatus();
   click();
   const ok = await publish({ type: 'move', id: R.me.id, game: s.game, ply: s.moves.length, uci, san: mv.san, fen: mv.after });
+  $('move-note').textContent = ok ? `Played ${mv.san}.` : '';
   if (!ok) {
     R.pending = null;
     renderBoard();
@@ -752,7 +805,7 @@ function inviteText(s) {
     '',
     'B) Command line (Node 18+, no installs):',
     `   curl -sO ${siteBase()}agent-chess.mjs`,
-    `   node agent-chess.mjs join ${R.code} --name "YOUR NAME"`,
+    `   node agent-chess.mjs join ${R.code} --name "YOUR NAME"${RELAY !== DEFAULT_RELAY ? ` --relay ${RELAY}` : ''}`,
     `   node agent-chess.mjs wait ${R.code}       # returns when it's your move, or after 20 s with "not yet" (run it again)`,
     `   node agent-chess.mjs move ${R.code} e5     # SAN or UCI`,
     '',
@@ -760,7 +813,10 @@ function inviteText(s) {
     `   Read the room:  curl -s "${topicUrl}/json?poll=1&since=all"`,
     `   Join:           curl -s -d '{"type":"join","id":"PICK-A-UNIQUE-ID","name":"YOUR NAME"}' ${topicUrl}`,
     `   Move:           curl -s -d '{"type":"move","id":"PICK-A-UNIQUE-ID","uci":"e7e5"}' ${topicUrl}`,
+    `   Wait for news:  curl -s --max-time 20 "${topicUrl}/json?since=<last message id>"   (returns after 20 s at most)`,
+    '   The relay only stores messages: you track the position yourself and watch for resign, draw offers and the result. Your clock starts when you join, so set up first.',
     '',
+    'After the game I may ask you for a short analysis: comments on key moves that show up next to the moves on my screen. The details are in the rules link below.',
     `Full rules and message formats: ${siteBase()}AGENTS.md`,
     'Feel free to chat in the room too: {"type":"chat","id":"...","text":"good luck"}',
   ].join('\n');
@@ -907,6 +963,10 @@ function renderReview() {
     return;
   }
   panel.hidden = false;
+  // Don't wipe a comment someone is typing when other messages arrive.
+  const active = document.activeElement;
+  if (active && active.matches && active.matches('#review-panel .rv-form :is(textarea, input, select)') && panel.dataset.ply === String(R.review.ply)) return;
+  panel.dataset.ply = String(R.review.ply);
   const s = R.s;
   const rec = reviewRecord();
   const ply = R.review.ply;
@@ -938,12 +998,18 @@ function renderReview() {
       body.push(el('div', { class: 'rv-summary' }, el('h3', { text: `Summary from ${x.author}` }), el('p', { text: x.text })));
     }
   }
-  if (!plies.length && !a.summaries.length) {
-    const asked = a.requests.length;
-    body.push(el('p', { class: 'rv-empty', text: asked
-      ? `Analysis requested. Comments will appear here as ${seat() ? G.playerName(s, G.other(seat())) : 'the players'} add them.`
+  const mine = seat();
+  const askedOfMe = mine && a.requests.find((r) => r.color !== mine);
+  const iAsked = mine && a.requests.some((r) => r.color === mine);
+  if (askedOfMe) {
+    body.push(el('p', { class: 'rv-ask', text: `${askedOfMe.by} asked you for an analysis. Step to a key moment and add a comment below, and finish with a summary on the last move.` }));
+  }
+  if (!plies.length && !a.summaries.length && !askedOfMe) {
+    body.push(el('p', { class: 'rv-empty', text: iAsked
+      ? `Analysis requested. Comments appear here as ${mine ? G.playerName(s, G.other(mine)) : 'your opponent'} adds them.`
       : 'No analysis yet. Use "Request analysis" to ask your opponent to annotate this game.' }));
   }
+  if (mine) body.push(annotateForm(ply, total, notes, a));
 
   const nav = (label, text, to, disabled) =>
     el('button', { class: 'btn nav', type: 'button', 'aria-label': label, title: label, text, disabled, onclick: () => stepReview(to) });
@@ -960,6 +1026,49 @@ function renderReview() {
       el('button', { class: 'btn', type: 'button', text: 'Next comment', disabled: !plies.some((p) => p > ply), onclick: () => nextNoted(1) })),
     el('p', { class: 'hint', text: 'Tip: ← and → step through the moves.' }),
   );
+}
+
+function annotateForm(ply, total, notes, a) {
+  const s = R.s;
+  const g = R.review.game;
+  const myId = R.me.id;
+  const form = el('form', { class: 'rv-form', autocomplete: 'off' });
+  if (ply > 0) {
+    const mineHere = notes.find((n) => n.authorId === myId);
+    const select = el('select', { id: 'rv-tag', 'aria-label': 'Tag' },
+      ...Object.entries(G.TAGS).map(([k, t]) => el('option', { value: k, text: `${t.symbol} ${t.label}`, selected: (mineHere ? mineHere.tag : 'note') === k })));
+    const text = el('textarea', { id: 'rv-text', rows: '3', maxlength: '1000', 'aria-label': 'Comment', placeholder: 'What happened on this move?' });
+    text.value = mineHere ? mineHere.text : '';
+    const better = el('input', { id: 'rv-better', 'aria-label': 'Better move', placeholder: 'Better move (optional), e.g. Nf3', value: mineHere && mineHere.better ? mineHere.better.san : '' });
+    const err = el('p', { class: 'form-error', role: 'alert' });
+    form.append(
+      el('h3', { text: `${mineHere ? 'Edit your' : 'Your'} comment on ${G.moveLabel(ply, reviewRecord().moves[ply - 1].san)}` }),
+      el('div', { class: 'rv-row' }, select, better), text, err,
+      el('button', { class: 'btn primary', type: 'submit', text: mineHere ? 'Update comment' : 'Post comment' }));
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      err.textContent = '';
+      const b = better.value.trim();
+      if (b) {
+        const c = new Chess(G.fenBefore(reviewRecord(), ply));
+        if (!G.previewMove({ chess: c }, b)) { err.textContent = `"${b}" isn't legal in the position before this move.`; return; }
+      }
+      if (!text.value.trim() && !b && select.value === 'note') { err.textContent = 'Write a comment, pick a tag or suggest a better move.'; return; }
+      const ok = await publish({ type: 'annotation', id: myId, game: g, at: G.plyLabel(ply), tag: select.value, text: text.value.trim(), better: b || undefined });
+      if (ok) { toast('Comment posted'); document.activeElement.blur(); renderReview(); }
+    };
+  }
+  if (ply === 0 || ply === total) {
+    const mineSum = a.summaries.find((x) => x.authorId === myId);
+    const sum = el('textarea', { id: 'rv-summary', rows: '3', maxlength: '1000', 'aria-label': 'Summary', placeholder: 'Two or three sentences on the whole game' });
+    sum.value = mineSum ? mineSum.text : '';
+    const sumBtn = el('button', { class: 'btn', type: 'button', text: mineSum ? 'Update summary' : 'Post summary', onclick: async () => {
+      if (!sum.value.trim()) return;
+      if (await publish({ type: 'annotation', id: myId, game: g, at: 'summary', text: sum.value.trim() })) { toast('Summary posted'); document.activeElement.blur(); renderReview(); }
+    } });
+    form.append(el('h3', { text: 'Game summary' }), sum, sumBtn);
+  }
+  return form;
 }
 
 function renderFeed() {
@@ -1023,7 +1132,7 @@ function wireRoomControls() {
     render();
   });
   document.addEventListener('keydown', (e) => {
-    if (!R.review || e.target.closest('input, textarea, .board')) return;
+    if (!R.review || e.target.closest('input, textarea, select, .board')) return;
     const steps = { ArrowLeft: -1, ArrowRight: 1 };
     if (e.key in steps) {
       e.preventDefault();

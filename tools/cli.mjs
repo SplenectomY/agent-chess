@@ -23,6 +23,8 @@ Commands
                              one-line "not yet" and exit 2: just run it again. Starting a new wait
                              stops any older one for the same room.
   wait ROOM --once           Check once without waiting: the board (exit 0) or "not yet" (exit 3)
+  wait ROOM --any            Return on anything new from the other side (move, chat, rematch or analysis
+                             request), e.g. after the game ends. Same timeout and exit codes.
   move ROOM MOVE             Play a move: SAN (Nf3, exd5, O-O, e8=Q) or UCI (g1f3, e7e8q)
   draw ROOM offer|accept|decline
   resign ROOM
@@ -65,7 +67,9 @@ function parseArgs(argv) {
 
 const { pos, opt } = parseArgs(process.argv.slice(2));
 const cmd = pos[0];
-const RELAY = String(opt.relay || process.env.AGENT_CHESS_RELAY || DEFAULT_RELAY).replace(/\/+$/, '');
+// Relay: --relay, else $AGENT_CHESS_RELAY, else whatever this room used before, else ntfy.sh.
+let RELAY = String(opt.relay || process.env.AGENT_CHESS_RELAY || DEFAULT_RELAY).replace(/\/+$/, '');
+const RELAY_GIVEN = !!(opt.relay || process.env.AGENT_CHESS_RELAY);
 const JSON_OUT = !!opt.json;
 
 function die(msg, code = 1) {
@@ -81,7 +85,7 @@ function loadIds() {
 }
 function saveId(code, ident) {
   const all = loadIds();
-  all[code] = ident;
+  all[code] = { ...ident, relay: RELAY };
   try { writeFileSync(ID_FILE, JSON.stringify(all, null, 2)); } catch { /* read-only home: pass --id next time */ }
 }
 function identity(code, { create = false } = {}) {
@@ -164,6 +168,7 @@ function snapshot(s, me) {
     white: s.players.w ? s.players.w.name : null,
     black: s.players.b ? s.players.b.name : null,
     started: s.started,
+    gameOver: !!s.result,
     turn: G.colorName(G.turn(s)).toLowerCase(),
     yourMove: myTurn,
     fen: s.chess.fen(),
@@ -212,6 +217,8 @@ function print(s, me, note) {
 function needRoom() {
   const code = String(pos[1] || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (!code) die(`Missing room code.\n\n${HELP}`);
+  const saved = loadIds()[code];
+  if (!RELAY_GIVEN && saved && saved.relay) RELAY = saved.relay;
   return code;
 }
 
@@ -278,7 +285,7 @@ async function cmdJoin() {
   const after = await settle(code, events, msgId);
   const seat = G.seatOf(after, id);
   if (!seat) die('The join was not accepted (someone else may have taken the seat first).');
-  print(after, id, `Joined room ${code} as ${G.colorName(seat)}. Your id is ${id}.${seat === 'w' ? ' Your clock is running: make your first move.' : ''}`);
+  print(after, id, `Joined room ${code} as ${G.colorName(seat)}. Your id is ${id}.${RELAY !== DEFAULT_RELAY ? ` Relay: ${RELAY} (remembered for this room).` : ''}${seat === 'w' ? ' Your clock is running: make your first move.' : ''}`);
 }
 
 async function cmdMove() {
@@ -471,7 +478,11 @@ async function cmdWait() {
   const events = await poll(code);
   let s = G.replay(events);
   needSeat(s, id, code);
+  // --any: return on anything new from someone else (useful after the game, to catch an
+  // analysis request, a rematch offer or chat). Otherwise: your move, game over or a draw offer.
+  const baseline = events.length;
   const done = () => {
+    if (opt.any) return events.slice(baseline).some((e) => e.data && e.data.id !== id);
     const seat = G.seatOf(s, id);
     if (s.result) return true;
     if (s.started && G.turn(s) === seat) return true;

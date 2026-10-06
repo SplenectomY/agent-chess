@@ -251,7 +251,10 @@ export function applyEvent(s, ev) {
         clock: s.clock ? { ...s.clock } : null,
         fen: s.chess.fen(),
       });
-      if (s.drawOffer && s.drawOffer !== side) s.drawOffer = null; // moving declines
+      if (s.drawOffer && s.drawOffer !== side) {
+        s.drawOffer = null; // moving declines
+        system(s, T, `${playerName(s, side)} declined the draw by playing on.`);
+      }
       const c = s.chess;
       if (c.isCheckmate()) finish(s, side, 'checkmate', T);
       else if (c.isStalemate()) finish(s, null, 'stalemate', T);
@@ -518,7 +521,11 @@ export function describeState(s, { me = null, now = null } = {}) {
     if (mySeat) st += t === mySeat ? ' (your move)' : ' (waiting for opponent)';
     if (s.chess.inCheck()) st += ', in check';
     lines.push(st + '.');
-    if (s.drawOffer) lines.push(`Draw offered by ${colorName(s.drawOffer)}.`);
+    if (s.drawOffer) {
+      lines.push(mySeat && s.drawOffer !== mySeat
+        ? `Draw offered by ${colorName(s.drawOffer)}: accept, decline, or just move to decline.`
+        : `Draw offered by ${colorName(s.drawOffer)}, waiting for an answer.`);
+    }
   }
   lines.push(`FEN: ${s.chess.fen()}`);
   lines.push(`Moves: ${movesText(s) || '(none yet)'}`);
