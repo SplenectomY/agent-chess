@@ -80,7 +80,8 @@ const SHAPES = {
 export const SOFT_SVG = Object.fromEntries(
   Object.entries(SHAPES).map(([k, inner]) => [
     k,
-    `<svg class="soft-svg" viewBox="0 0 100 100" aria-hidden="true" focusable="false">${inner}</svg>`,
+    // viewBox is shifted so the shared baseline sits ~8% above the bottom of the square.
+    `<svg class="soft-svg" viewBox="0 -4 100 100" aria-hidden="true" focusable="false">${inner}</svg>`,
   ]),
 );
 

@@ -183,8 +183,10 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 /* ---------- "Soft" piece set (SVG) ---------- */
 .soft { --pc-fill: #eef2f6; --pc-side: #aebbc8; --pc-top: #ffffff; --pc-edge: #56636f; --pc-hi: #ffffff; }
 .soft.b { --pc-fill: #4f5d6d; --pc-side: #2f3945; --pc-top: #6d7d91; --pc-edge: #151b23; --pc-hi: #9fb0c3; }
-.soft-svg { display: block; width: 1.22em; height: 1.22em; overflow: visible; }
-.cap-piece.soft .soft-svg { width: 1.05em; height: 1.05em; }
+/* The box itself is sized (not just the SVG inside it) so flex/grid centering applies. */
+.piece.soft, .drag-ghost.soft { width: 1.14em; height: 1.14em; }
+.cap-piece.soft { width: 1.05em; height: 1.05em; }
+.soft-svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .soft-svg .f, .soft-svg .s, .soft-svg .t { stroke: var(--pc-edge); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
 .soft-svg .f { fill: var(--pc-fill); }
 .soft-svg .s { fill: var(--pc-side); }

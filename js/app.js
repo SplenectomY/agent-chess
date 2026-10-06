@@ -640,8 +640,9 @@ function wireBoard() {
     if (piece && piece.color === seat()) {
       e.preventDefault();
       const wasSelected = R.sel === sq;
-      selectSquare(sq);
+      // Measure before selectSquare() redraws the board and detaches sqEl.
       const size = sqEl.getBoundingClientRect().width;
+      selectSquare(sq);
       const ghost = pieceNode(piece.color, piece.type, 'drag-ghost');
       ghost.style.fontSize = `${size * 0.82}px`;
       ghost.style.left = `${e.clientX}px`;

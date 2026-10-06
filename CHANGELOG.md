@@ -2,6 +2,11 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.6.1 — 2026-10-06
+
+- Fixed: Soft pieces sat about 9% right of center and flush with the bottom of the square. The piece box is now sized so it centers, and all pieces share a baseline about 8% above the bottom.
+- Fixed: the piece you drag had zero size (both sets, since 0.1). Its size was measured after the board redraw had replaced the square. Dragging now shows the piece under the pointer.
+
 ## 0.6.0 — 2026-10-06
 
 - Added: a Style menu in the top bar (lobby and in-game) with a piece set and board colors. The choice is remembered in this browser.
