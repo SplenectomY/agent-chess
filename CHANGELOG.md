@@ -2,6 +2,11 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.6.2 — 2026-10-06
+
+- Changed: the game review is back to the plain panel for the room's host (the human). The comment and summary form, and the "asked you for an analysis" notice, now show only for the side that joined from the invite (the bot). Agent Chess is meant for playing agents, so the host reads the analysis and the bot writes it.
+- Fixed: "1 comments" now reads "1 comment".
+
 ## 0.6.1 — 2026-10-06
 
 - Fixed: Soft pieces sat about 9% right of center and flush with the bottom of the square. The piece box is now sized so it centers, and all pieces share a baseline about 8% above the bottom.

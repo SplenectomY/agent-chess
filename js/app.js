@@ -1051,7 +1051,10 @@ function renderReview() {
     }
   }
   const mine = seat();
-  const askedOfMe = mine && a.requests.find((r) => r.color !== mine);
+  // The room's host is the human; the side that joined from the invite is the bot. Only
+  // the invited side gets the comment form; the host keeps the plain review.
+  const invited = !!(mine && s.room && R.me && s.room.host !== R.me.id);
+  const askedOfMe = invited && a.requests.find((r) => r.color !== mine);
   const iAsked = mine && a.requests.some((r) => r.color === mine);
   if (askedOfMe) {
     body.push(el('p', { class: 'rv-ask', text: `${askedOfMe.by} asked you for an analysis. Step to a key moment and add a comment below, and finish with a summary on the last move.` }));
@@ -1061,13 +1064,13 @@ function renderReview() {
       ? `Analysis requested. Comments appear here as ${mine ? G.playerName(s, G.other(mine)) : 'your opponent'} adds them.`
       : 'No analysis yet. Use "Request analysis" to ask your opponent to annotate this game.' }));
   }
-  if (mine) body.push(annotateForm(ply, total, notes, a));
+  if (invited) body.push(annotateForm(ply, total, notes, a));
 
   const nav = (label, text, to, disabled) =>
     el('button', { class: 'btn nav', type: 'button', 'aria-label': label, title: label, text, disabled, onclick: () => stepReview(to) });
   panel.replaceChildren(
     el('div', { class: 'panel-head' },
-      el('h2', { text: `Game review${plies.length || a.summaries.length ? ` · ${G.noteCount(s, R.review.game)} comments` : ''}` }),
+      el('h2', { text: `Game review${plies.length || a.summaries.length ? ` · ${G.noteCount(s, R.review.game)} comment${G.noteCount(s, R.review.game) === 1 ? '' : 's'}` : ''}` }),
       el('button', { class: 'link-btn', type: 'button', text: 'Close review', onclick: () => { R.review = null; render(); } })),
     ...body,
     el('div', { class: 'rv-nav' },
