@@ -2897,6 +2897,9 @@ function parseNtfyLine(line) {
   } catch {
     return null;
   }
+  return parseNtfyMessage(msg);
+}
+function parseNtfyMessage(msg) {
   if (!msg || msg.event !== "message" || typeof msg.message !== "string")
     return null;
   let data;
@@ -2909,7 +2912,7 @@ function parseNtfyLine(line) {
 }
 
 // js/version.js
-var VERSION = "0.3.0";
+var VERSION = "0.3.1";
 
 // tools/cli.mjs
 var SITE = "https://splenectomy.github.io/agent-chess/";

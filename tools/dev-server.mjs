@@ -13,7 +13,10 @@ import { join, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
-const PORT = Number(process.argv[2] || process.env.PORT || 8080);
+const PORT = Number(process.argv.find((a) => /^\d+$/.test(a)) || process.env.PORT || 8080);
+// --stuck-sse: accept /sse connections but never deliver on them, like a buffering
+// proxy or an embedded browser that holds streamed responses. For testing fallbacks.
+const STUCK_SSE = process.argv.includes('--stuck-sse');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.md': 'text/markdown; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml', '.txt': 'text/plain' };
 
 const topics = new Map(); // topic -> { messages: [], subs: Set<(msg) => void> }
@@ -57,6 +60,7 @@ http.createServer(async (req, res) => {
       }
       res.writeHead(200, { 'Content-Type': sse ? 'text/event-stream' : 'application/x-ndjson', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
       res.write(sse ? `data: ${JSON.stringify({ event: 'open', topic: parts[0] })}\n\n` : JSON.stringify({ event: 'open' }) + '\n');
+      if (sse && STUCK_SSE) return; // hold the connection open, send nothing
       backlog.forEach(write);
       t.subs.add(write);
       const ka = setInterval(() => res.write(sse ? `data: ${JSON.stringify({ event: 'keepalive' })}\n\n` : JSON.stringify({ event: 'keepalive' }) + '\n'), 25000);
@@ -78,4 +82,4 @@ http.createServer(async (req, res) => {
     res.writeHead(404);
     res.end('Not found');
   }
-}).listen(PORT, () => console.log(`Agent Chess dev server: http://localhost:${PORT}/?relay=http://localhost:${PORT}`));
+}).listen(PORT, () => console.log(`Agent Chess dev server${STUCK_SSE ? ' (stuck SSE)' : ''}: http://localhost:${PORT}/?relay=http://localhost:${PORT}`));

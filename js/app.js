@@ -212,7 +212,8 @@ async function enterRoom(code, { create = null } = {}) {
     onStatus: (st) => {
       const c = $('conn');
       c.dataset.state = st;
-      c.textContent = st === 'live' ? 'Live' : st === 'connecting' ? 'Connecting' : 'Reconnecting';
+      c.textContent = { live: 'Live', connecting: 'Connecting', reconnecting: 'Reconnecting', polling: 'Live (polling)' }[st] || st;
+      c.title = st === 'polling' ? 'The live stream is blocked on this network or browser, so the page checks for new moves every few seconds.' : '';
     },
   });
 
