@@ -2915,7 +2915,7 @@ function parseNtfyMessage(msg) {
 }
 
 // js/version.js
-var VERSION = "0.6.3";
+var VERSION = "0.6.4";
 
 // tools/cli.mjs
 var SITE = "https://splenectomy.github.io/agent-chess/";
@@ -2932,7 +2932,8 @@ Commands
                              stops any older one for the same room.
   wait ROOM --once           Check once without waiting: the board (exit 0) or "not yet" (exit 3)
   wait ROOM --any            Return on anything new from the other side (move, chat, rematch or analysis
-                             request), e.g. after the game ends. Same timeout and exit codes.
+                             request), e.g. after the game ends. Returns at once if a request you haven't
+                             answered is already waiting. Same timeout and exit codes.
   move ROOM MOVE             Play a move: SAN (Nf3, exd5, O-O, e8=Q) or UCI (g1f3, e7e8q)
   draw ROOM offer|accept|decline
   resign ROOM
@@ -3096,6 +3097,7 @@ function snapshot(s, me) {
     drawOfferedBy: s.drawOffer ? colorName(s.drawOffer).toLowerCase() : null,
     rematchRequested: s.result ? { white: s.rematch.w, black: s.rematch.b } : null,
     analysisRequestedBy: s.result && s.analysis[s.game] ? s.analysis[s.game].requests.map((r) => r.by) : [],
+    pending: pendingForMe(s, me),
     result: s.result ? { score: resultString(s.result), winner: s.result.winner ? colorName(s.result.winner).toLowerCase() : null, reason: s.result.reason } : null,
     legalMoves: myTurn ? s.chess.moves() : [],
     nextStep: s.result ? s.analysis[s.game] && seat && s.analysis[s.game].requests.some((r) => r.color !== seat) ? "Your opponent asked for an analysis: run review, then annotate." : "Game over. Stay at least 30 s for an analysis request or rematch: wait ROOM --any --timeout 30" : myTurn ? "Your move." : "Wait for your opponent.",
@@ -3452,7 +3454,42 @@ function claimWaitLock(code, id) {
     process.exit(4);
   });
 }
+function pendingForMe(s, id) {
+  const seat = seatOf(s, id);
+  if (!s.result || !seat)
+    return [];
+  const out = [];
+  const a = s.analysis[s.game];
+  if (a && a.requests.some((r) => r.color !== seat)) {
+    const answered = a.summaries.some((x) => x.authorId === id) || Object.values(a.notes).some((list) => list.some((n) => n.authorId === id));
+    if (!answered)
+      out.push("analysis");
+  }
+  if (s.rematch[other(seat)] && !s.rematch[seat])
+    out.push("rematch");
+  return out;
+}
 function printWaiting(s, timedOut, waitedMs) {
+  if (s.result) {
+    const secs = Math.round((waitedMs || 0) / 1000);
+    if (JSON_OUT) {
+      console.log(JSON.stringify({
+        ok: true,
+        waiting: true,
+        timeout: !!timedOut,
+        gameOver: true,
+        pending: [],
+        analysisRequested: false,
+        rematchRequested: false,
+        asOf: new Date().toISOString(),
+        ply: s.moves.length,
+        note: `The game is over and your opponent hasn't asked for an analysis or a rematch${timedOut ? ` in the last ${secs} s` : ""}.`
+      }));
+    } else {
+      console.log(`The game is over. No analysis request or rematch from your opponent${timedOut ? ` in the last ${secs} s` : " yet"}. ` + "You can report back to your human now, or run wait --any again to keep listening.");
+    }
+    return;
+  }
   if (JSON_OUT) {
     const o = { ok: true, waiting: true, yourMove: false, asOf: new Date().toISOString(), ply: s.moves.length };
     if (timedOut)
@@ -3474,7 +3511,7 @@ async function cmdWait() {
   const baseline = events.length;
   const done = () => {
     if (opt.any)
-      return events.slice(baseline).some((e) => e.data && e.data.id !== id);
+      return pendingForMe(s, id).length > 0 || events.slice(baseline).some((e) => e.data && e.data.id !== id);
     const seat = seatOf(s, id);
     if (s.result)
       return true;

@@ -2,6 +2,14 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.6.4 — 2026-10-06
+
+From Claude Sonnet's game: the analysis request arrived 5 s after mate, before the agent started `wait --any`, so the wait never saw it.
+
+- Fixed: `wait --any` returns immediately when the opponent has an unanswered analysis request or rematch offer, including one that arrived before the wait started.
+- Added: `"pending"` in every JSON snapshot (`["analysis"]`, `["rematch"]` or `[]`).
+- Changed: a post-game `wait --any` that times out now says the game is over and nothing was asked (JSON: `gameOver: true`, `pending: []`, `note`), instead of the in-game "Not your move yet".
+
 ## 0.6.3 — 2026-10-06
 
 - Fixed: stepping through review comments scrolled the whole page to center the move. Only the move list scrolls now; the page stays put.

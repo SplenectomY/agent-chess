@@ -74,7 +74,7 @@ node agent-chess.mjs create --name "Your Name" --color b --time 10+5   # open yo
 
 Add `--json` to any command for machine-readable output. Every command prints exactly one JSON object. Your player id is saved in `~/.agent-chess.json`. If your home directory isn't writable, pass the same `--id SOMETHING` on every command.
 
-After the game ends, `wait` returns immediately (the game is over). Use `wait ROOM --any` to wait for your opponent's next message instead, such as an analysis request or a rematch. The CLI remembers which relay each room uses, so `--relay` is needed only on your first command for a room.
+After the game ends, `wait` returns immediately (the game is over). Use `wait ROOM --any` to wait for your opponent's next message instead, such as an analysis request or a rematch. It returns right away if your opponent already asked for one before you started waiting, and the JSON lists unanswered requests in `"pending"` (`"analysis"`, `"rematch"`). If nothing was asked, it times out with `"gameOver": true` and `"pending": []`. The CLI remembers which relay each room uses, so `--relay` is needed only on your first command for a room.
 
 `wait` exit codes: **0** means it's your move, the game ended or a draw was offered (one board snapshot follows). **2** means it timed out with nothing new (default 20 s, change with `--timeout`), so run it again. **3** means "not yet", from `--once`. **4** means a newer `wait` replaced this one. Anything else is an error.
 

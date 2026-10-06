@@ -24,7 +24,8 @@ Commands
                              stops any older one for the same room.
   wait ROOM --once           Check once without waiting: the board (exit 0) or "not yet" (exit 3)
   wait ROOM --any            Return on anything new from the other side (move, chat, rematch or analysis
-                             request), e.g. after the game ends. Same timeout and exit codes.
+                             request), e.g. after the game ends. Returns at once if a request you haven't
+                             answered is already waiting. Same timeout and exit codes.
   move ROOM MOVE             Play a move: SAN (Nf3, exd5, O-O, e8=Q) or UCI (g1f3, e7e8q)
   draw ROOM offer|accept|decline
   resign ROOM
@@ -180,6 +181,7 @@ function snapshot(s, me) {
     drawOfferedBy: s.drawOffer ? G.colorName(s.drawOffer).toLowerCase() : null,
     rematchRequested: s.result ? { white: s.rematch.w, black: s.rematch.b } : null,
     analysisRequestedBy: s.result && s.analysis[s.game] ? s.analysis[s.game].requests.map((r) => r.by) : [],
+    pending: pendingForMe(s, me),
     result: s.result ? { score: G.resultString(s.result), winner: s.result.winner ? G.colorName(s.result.winner).toLowerCase() : null, reason: s.result.reason } : null,
     legalMoves: myTurn ? s.chess.moves() : [],
     nextStep: s.result
@@ -467,7 +469,35 @@ function claimWaitLock(code, id) {
   });
 }
 
+// Post-game requests from the opponent that this player hasn't answered yet.
+function pendingForMe(s, id) {
+  const seat = G.seatOf(s, id);
+  if (!s.result || !seat) return [];
+  const out = [];
+  const a = s.analysis[s.game];
+  if (a && a.requests.some((r) => r.color !== seat)) {
+    const answered = a.summaries.some((x) => x.authorId === id) ||
+      Object.values(a.notes).some((list) => list.some((n) => n.authorId === id));
+    if (!answered) out.push('analysis');
+  }
+  if (s.rematch[G.other(seat)] && !s.rematch[seat]) out.push('rematch');
+  return out;
+}
+
 function printWaiting(s, timedOut, waitedMs) {
+  if (s.result) {
+    // Post-game wait: say plainly that nothing was asked, instead of the in-game "not your move".
+    const secs = Math.round((waitedMs || 0) / 1000);
+    if (JSON_OUT) {
+      console.log(JSON.stringify({ ok: true, waiting: true, timeout: !!timedOut, gameOver: true, pending: [],
+        analysisRequested: false, rematchRequested: false, asOf: new Date().toISOString(), ply: s.moves.length,
+        note: `The game is over and your opponent hasn't asked for an analysis or a rematch${timedOut ? ` in the last ${secs} s` : ''}.` }));
+    } else {
+      console.log(`The game is over. No analysis request or rematch from your opponent${timedOut ? ` in the last ${secs} s` : ' yet'}. ` +
+        'You can report back to your human now, or run wait --any again to keep listening.');
+    }
+    return;
+  }
   if (JSON_OUT) {
     const o = { ok: true, waiting: true, yourMove: false, asOf: new Date().toISOString(), ply: s.moves.length };
     if (timedOut) o.timeout = true;
@@ -489,10 +519,12 @@ async function cmdWait() {
   let s = G.replay(events);
   needSeat(s, id, code);
   // --any: return on anything new from someone else (useful after the game, to catch an
-  // analysis request, a rematch offer or chat). Otherwise: your move, game over or a draw offer.
+  // analysis request, a rematch offer or chat), and also right away if a post-game request
+  // from the opponent is already waiting for an answer, even one that arrived before this
+  // wait started. Otherwise: your move, game over or a draw offer.
   const baseline = events.length;
   const done = () => {
-    if (opt.any) return events.slice(baseline).some((e) => e.data && e.data.id !== id);
+    if (opt.any) return pendingForMe(s, id).length > 0 || events.slice(baseline).some((e) => e.data && e.data.id !== id);
     const seat = G.seatOf(s, id);
     if (s.result) return true;
     if (s.started && G.turn(s) === seat) return true;
