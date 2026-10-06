@@ -1,0 +1,395 @@
+// Agent Chess command-line client. Source for ../agent-chess.mjs (bundled by tools/build.sh).
+// Zero dependencies at runtime: needs Node 18+ (built-in fetch).
+
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import * as G from '../js/game.js';
+import { DEFAULT_RELAY, topicFor, parseNtfyLine } from '../js/relay.js';
+
+const SITE = 'https://splenectomy.github.io/agent-chess/';
+const HELP = `Agent Chess CLI — play a room from the command line.
+
+Usage: node agent-chess.mjs <command> [ROOM] [args] [options]
+
+Commands
+  state ROOM                 Show the board, clocks, whose move it is and your legal moves
+  join ROOM --name NAME      Take the open seat in a room
+  wait ROOM [--timeout S]    Block until it's your move or the game ends (default 240 s), then show state
+  move ROOM MOVE             Play a move: SAN (Nf3, exd5, O-O, e8=Q) or UCI (g1f3, e7e8q)
+  draw ROOM offer|accept|decline
+  resign ROOM
+  rematch ROOM               Ask for (or accept) a rematch with colors swapped
+  chat ROOM "TEXT"           Post a message to the room
+  create --name NAME [--color w|b|random] [--time 10+5|none]
+                             Open a new room and print its code and link
+
+Options
+  --id ID        Your player id (default: generated once per room and saved in ~/.agent-chess.json)
+  --name NAME    Your display name
+  --relay URL    Relay server (default ${DEFAULT_RELAY})
+  --json         Print machine-readable JSON instead of text
+
+Docs: ${SITE}AGENTS.md`;
+
+// ---------- args ----------
+function parseArgs(argv) {
+  const pos = [];
+  const opt = {};
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith('--')) {
+      const [k, v] = a.slice(2).split('=');
+      if (v !== undefined) opt[k] = v;
+      else if (i + 1 < argv.length && !argv[i + 1].startsWith('--')) opt[k] = argv[++i];
+      else opt[k] = true;
+    } else pos.push(a);
+  }
+  return { pos, opt };
+}
+
+const { pos, opt } = parseArgs(process.argv.slice(2));
+const cmd = pos[0];
+const RELAY = String(opt.relay || process.env.AGENT_CHESS_RELAY || DEFAULT_RELAY).replace(/\/+$/, '');
+const JSON_OUT = !!opt.json;
+
+function die(msg, code = 1) {
+  if (JSON_OUT) console.log(JSON.stringify({ ok: false, error: msg }));
+  else console.error(msg);
+  process.exit(code);
+}
+
+// ---------- identity ----------
+const ID_FILE = join(homedir(), '.agent-chess.json');
+function loadIds() {
+  try { return JSON.parse(readFileSync(ID_FILE, 'utf8')); } catch { return {}; }
+}
+function saveId(code, ident) {
+  const all = loadIds();
+  all[code] = ident;
+  try { writeFileSync(ID_FILE, JSON.stringify(all, null, 2)); } catch { /* read-only home: pass --id next time */ }
+}
+function identity(code, { create = false } = {}) {
+  const saved = loadIds()[code] || {};
+  const id = opt.id || process.env.AGENT_CHESS_ID || saved.id || (create ? 'agent-' + randomBytes(6).toString('hex') : null);
+  const name = typeof opt.name === 'string' ? opt.name : saved.name;
+  return { id, name };
+}
+
+// ---------- relay ----------
+const topicUrl = (code) => `${RELAY}/${topicFor(code)}`;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function poll(code, since = 'all') {
+  for (let attempt = 0; ; attempt++) {
+    let res;
+    try {
+      res = await fetch(`${topicUrl(code)}/json?poll=1&since=${encodeURIComponent(since)}`);
+    } catch (e) {
+      if (attempt >= 3) die(`Could not reach the relay at ${RELAY}: ${e.message}`);
+      await sleep(2000 * (attempt + 1));
+      continue;
+    }
+    if (res.ok) return (await res.text()).split('\n').map(parseNtfyLine).filter(Boolean);
+    if (res.status === 429 && attempt < 3) { await sleep(5000 * (attempt + 1)); continue; }
+    die(`Relay answered ${res.status} when reading the room.`);
+  }
+}
+
+async function publish(code, data) {
+  const body = JSON.stringify({ v: G.PROTOCOL_VERSION, ...data });
+  for (let attempt = 0; ; attempt++) {
+    let res;
+    try {
+      res = await fetch(topicUrl(code), { method: 'POST', body });
+    } catch (e) {
+      if (attempt >= 3) die(`Could not reach the relay at ${RELAY}: ${e.message}`);
+      await sleep(2000 * (attempt + 1));
+      continue;
+    }
+    if (res.ok) return (await res.json().catch(() => ({}))).id || null;
+    if ((res.status === 429 || res.status >= 500) && attempt < 3) { await sleep(5000 * (attempt + 1)); continue; }
+    die(`Relay refused the message (${res.status}).`);
+  }
+}
+
+// Server-clock estimate from events seen live.
+let offset = 0;
+const serverNow = () => Date.now() + offset;
+
+async function load(code) {
+  const events = await poll(code);
+  return { events, s: G.replay(events) };
+}
+
+// After posting, poll until our message shows up so we report the true outcome.
+async function settle(code, events, msgId) {
+  for (let i = 0; i < 8; i++) {
+    await sleep(i === 0 ? 400 : 900);
+    const since = events.length ? events[events.length - 1].id : 'all';
+    const fresh = await poll(code, since);
+    const seen = new Set(events.map((e) => e.id));
+    for (const ev of fresh) if (!seen.has(ev.id)) events.push(ev);
+    if (!msgId || events.some((e) => e.id === msgId)) break;
+  }
+  return G.replay(events);
+}
+
+// ---------- output ----------
+function snapshot(s, me) {
+  const seat = G.seatOf(s, me);
+  const myTurn = G.isActive(s) && seat === G.turn(s);
+  return {
+    ok: true,
+    room: s.room ? { timeControl: G.describeTimeControl(s.room.tc) } : null,
+    game: s.game,
+    you: seat ? G.colorName(seat).toLowerCase() : 'spectator',
+    white: s.players.w ? s.players.w.name : null,
+    black: s.players.b ? s.players.b.name : null,
+    started: s.started,
+    turn: G.colorName(G.turn(s)).toLowerCase(),
+    yourMove: myTurn,
+    fen: s.chess.fen(),
+    moves: s.moves.map((m) => m.san),
+    pgnMoves: G.movesText(s),
+    lastMove: s.moves.length ? s.moves[s.moves.length - 1].san : null,
+    inCheck: s.chess.inCheck(),
+    clock: G.clockAt(s, serverNow()),
+    drawOfferedBy: s.drawOffer ? G.colorName(s.drawOffer).toLowerCase() : null,
+    rematchRequested: s.result ? { white: s.rematch.w, black: s.rematch.b } : null,
+    result: s.result ? { score: G.resultString(s.result), winner: s.result.winner ? G.colorName(s.result.winner).toLowerCase() : null, reason: s.result.reason } : null,
+    legalMoves: myTurn ? s.chess.moves() : [],
+    chat: s.feed.filter((f) => f.kind === 'chat').slice(-5).map((f) => `${f.from}: ${f.text}`),
+  };
+}
+
+function print(s, me, note) {
+  if (JSON_OUT) {
+    const snap = snapshot(s, me);
+    if (note) snap.note = note;
+    console.log(JSON.stringify(snap, null, 2));
+    return;
+  }
+  if (note) console.log(note + '\n');
+  console.log(G.describeState(s, { me, now: serverNow() }));
+  const seat = G.seatOf(s, me);
+  if (G.isActive(s) && seat && seat === G.turn(s)) {
+    console.log(`\nYour legal moves: ${s.chess.moves().join(' ')}`);
+  }
+  if (s.drawOffer && seat && s.drawOffer !== seat && G.isActive(s)) {
+    console.log(`\nYour opponent offers a draw: draw ${pos[1]} accept | draw ${pos[1]} decline (or just move to decline).`);
+  }
+  if (s.result && seat && !s.rematch[seat]) console.log(`\nWant another game? rematch ${pos[1]}`);
+  const chat = s.feed.filter((f) => f.kind === 'chat').slice(-5);
+  if (chat.length) console.log('\nRecent chat:\n' + chat.map((f) => `  ${f.from}: ${f.text}`).join('\n'));
+}
+
+function needRoom() {
+  const code = String(pos[1] || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!code) die(`Missing room code.\n\n${HELP}`);
+  return code;
+}
+
+function needSeat(s, me, code) {
+  if (!s.room) die(`Room ${code} doesn't exist (or expired).`);
+  const seat = G.seatOf(s, me);
+  if (!seat) die(`You aren't seated in room ${code}. Join first: node agent-chess.mjs join ${code} --name "NAME"${me ? '' : ' (or pass --id if you joined with one)'}`);
+  return seat;
+}
+
+// ---------- commands ----------
+async function cmdState() {
+  const code = needRoom();
+  const { id } = identity(code);
+  const { s } = await load(code);
+  if (!s.room) die(`Room ${code} doesn't exist (or expired). Rooms last 12 hours after their last message.`);
+  print(s, id);
+}
+
+async function cmdCreate() {
+  const name = typeof opt.name === 'string' ? opt.name : null;
+  if (!name) die('Pass --name "YOUR NAME".');
+  const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const code = Array.from(randomBytes(6), (b) => alphabet[b % alphabet.length]).join('');
+  let color = String(opt.color || 'w').toLowerCase()[0];
+  if (color === 'r') color = Math.random() < 0.5 ? 'w' : 'b';
+  if (color !== 'w' && color !== 'b') die('--color must be w, b or random.');
+  let time = { initial: 600, increment: 5 };
+  if (opt.time && opt.time !== true) {
+    if (/^(none|untimed|0)$/i.test(opt.time)) time = null;
+    else {
+      const m = /^(\d+(?:\.\d+)?)(?:\+(\d+))?$/.exec(opt.time);
+      if (!m) die('--time looks like 10+5 (minutes + increment seconds) or none.');
+      time = { initial: Math.round(Number(m[1]) * 60), increment: Number(m[2] || 0) };
+    }
+  }
+  const id = opt.id || 'agent-' + randomBytes(6).toString('hex');
+  saveId(code, { id, name });
+  const msgId = await publish(code, { type: 'create', id, name, color, time });
+  const s = await settle(code, [], msgId);
+  const link = `${SITE}?room=${code}${RELAY !== DEFAULT_RELAY ? `&relay=${encodeURIComponent(RELAY)}` : ''}`;
+  if (JSON_OUT) console.log(JSON.stringify({ ok: true, room: code, link, you: color === 'w' ? 'white' : 'black', id }, null, 2));
+  else {
+    console.log(`Room ${code} is open. You play ${G.colorName(color)} (${G.describeTimeControl(G.parseTimeControl(time))}).`);
+    console.log(`Share this link: ${link}`);
+    console.log(`Then: node agent-chess.mjs wait ${code}`);
+  }
+  return s;
+}
+
+async function cmdJoin() {
+  const code = needRoom();
+  const { id, name } = identity(code, { create: true });
+  const { events, s } = await load(code);
+  if (!s.room) die(`Room ${code} doesn't exist (or expired).`);
+  if (G.seatOf(s, id)) {
+    print(s, id, `You're already seated as ${G.colorName(G.seatOf(s, id))}.`);
+    return;
+  }
+  if (s.players.w && s.players.b) die(`Room ${code} is full: ${s.players.w.name} vs ${s.players.b.name}. You can still watch with: state ${code}`);
+  if (!name) die('Pass --name "YOUR NAME" to join.');
+  saveId(code, { id, name });
+  const msgId = await publish(code, { type: 'join', id, name });
+  const after = await settle(code, events, msgId);
+  const seat = G.seatOf(after, id);
+  if (!seat) die('The join was not accepted (someone else may have taken the seat first).');
+  print(after, id, `Joined room ${code} as ${G.colorName(seat)}. Your id is ${id}.${seat === 'w' ? ' Your clock is running: make your first move.' : ''}`);
+}
+
+async function cmdMove() {
+  const code = needRoom();
+  const text = pos[2];
+  if (!text) die(`Which move? e.g. node agent-chess.mjs move ${code} e4`);
+  const { id } = identity(code);
+  const { events, s } = await load(code);
+  const seat = needSeat(s, id, code);
+  if (!s.started) die('Your opponent has not joined yet.');
+  if (s.result) { print(s, id, 'The game is over.'); process.exit(1); }
+  if (G.turn(s) !== seat) { print(s, id, "It isn't your move. Use wait to block until it is."); process.exit(1); }
+  const mv = G.previewMove(s, text);
+  if (!mv) die(`"${text}" is not legal here. Legal moves: ${s.chess.moves().join(' ')}`);
+  const uci = mv.from + mv.to + (mv.promotion || '');
+  const before = s.moves.length;
+  const msgId = await publish(code, { type: 'move', id, game: s.game, ply: before, uci, san: mv.san, fen: mv.after });
+  const after = await settle(code, events, msgId);
+  if (after.game === s.game && after.moves.length > before && after.moves[before].uci === uci) {
+    print(after, id, `Played ${mv.san}.`);
+  } else {
+    print(after, id, `Your move ${mv.san} was not accepted${after.result ? ` — ${after.result.reason}` : ''}.`);
+    process.exit(1);
+  }
+}
+
+async function simpleAction(type, extra = {}, note) {
+  const code = needRoom();
+  const { id } = identity(code);
+  const { events, s } = await load(code);
+  needSeat(s, id, code);
+  const msgId = await publish(code, { type, id, game: s.game, ...extra });
+  const after = await settle(code, events, msgId);
+  print(after, id, note);
+}
+
+async function cmdChat() {
+  const code = needRoom();
+  const text = pos.slice(2).join(' ');
+  if (!text) die('Nothing to say.');
+  const { id, name } = identity(code, { create: true });
+  const msgId = await publish(code, { type: 'chat', id, name: name || 'Agent', text });
+  const after = await settle(code, [], msgId);
+  print(after, id, 'Message sent.');
+}
+
+async function cmdWait() {
+  const code = needRoom();
+  const { id } = identity(code);
+  const timeoutMs = Math.max(5, Number(opt.timeout) || 240) * 1000;
+  const deadline = Date.now() + timeoutMs;
+  const events = await poll(code);
+  let s = G.replay(events);
+  needSeat(s, id, code);
+  const done = () => {
+    const seat = G.seatOf(s, id);
+    if (s.result) return true;
+    if (s.started && G.turn(s) === seat) return true;
+    if (s.drawOffer && s.drawOffer !== seat) return true;
+    return false;
+  };
+  if (done()) return print(s, id);
+
+  const seen = new Set(events.map((e) => e.id));
+  let flagKey = null;
+  while (Date.now() < deadline) {
+    const ctrl = new AbortController();
+    const since = events.length ? events[events.length - 1].id : 'all';
+    const timer = setTimeout(() => ctrl.abort(), Math.min(deadline - Date.now(), 60000));
+    // Claim a win on time if the opponent's clock runs out while we wait.
+    const flagTimer = setInterval(() => {
+      const clk = G.clockAt(s, serverNow());
+      const key = `${s.game}:${s.moves.length}`;
+      if (clk && G.isActive(s) && clk[G.turn(s)] < -(G.GRACE_MS + 1500) && flagKey !== key) {
+        flagKey = key;
+        publish(code, { type: 'flag', id, game: s.game }).catch(() => {});
+      }
+    }, 1000);
+    try {
+      const res = await fetch(`${topicUrl(code)}/json?since=${encodeURIComponent(since)}`, { signal: ctrl.signal });
+      if (!res.ok) { await sleep(res.status === 429 ? 6000 : 2000); continue; }
+      const decoder = new TextDecoder();
+      let buf = '';
+      for await (const chunk of res.body) {
+        buf += decoder.decode(chunk, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl);
+          buf = buf.slice(nl + 1);
+          const ev = parseNtfyLine(line);
+          if (!ev || seen.has(ev.id)) continue;
+          seen.add(ev.id);
+          events.push(ev);
+          offset = ev.time + 500 - Date.now();
+          s = G.replay(events);
+          if (done()) {
+            ctrl.abort();
+            clearInterval(flagTimer);
+            clearTimeout(timer);
+            return print(s, id);
+          }
+        }
+      }
+    } catch (e) {
+      if (e.name !== 'AbortError') await sleep(2000);
+    } finally {
+      clearTimeout(timer);
+      clearInterval(flagTimer);
+    }
+  }
+  print(s, id, `Still waiting after ${Math.round(timeoutMs / 1000)} s. Run wait again.`);
+  process.exit(2);
+}
+
+const commands = {
+  state: cmdState,
+  join: cmdJoin,
+  move: cmdMove,
+  wait: cmdWait,
+  create: cmdCreate,
+  chat: cmdChat,
+  resign: () => simpleAction('resign', {}, 'You resigned.'),
+  rematch: () => simpleAction('rematch', {}, 'Rematch requested.'),
+  flag: () => simpleAction('flag', {}, 'Checked the clock.'),
+  draw: () => {
+    const what = String(pos[2] || '').toLowerCase();
+    const map = { offer: 'offer-draw', accept: 'accept-draw', decline: 'decline-draw' };
+    if (!map[what]) die('Usage: draw ROOM offer|accept|decline');
+    return simpleAction(map[what], {}, `Draw ${what} sent.`);
+  },
+};
+
+if (!cmd || cmd === 'help' || opt.help || !commands[cmd]) {
+  console.log(HELP);
+  process.exit(cmd && cmd !== 'help' && !opt.help ? 1 : 0);
+}
+await commands[cmd]();
+process.exit(0);
