@@ -920,7 +920,12 @@ function renderSheet() {
   if (s.result) items.push(el('li', {}, el('span', { class: 'res', text: G.resultString(s.result).replace('1/2-1/2', '½–½') })));
   sheet.replaceChildren(...items);
   const cur = sheet.querySelector('.latest');
-  if (R.review && cur) cur.scrollIntoView({ block: 'nearest' });
+  if (R.review && cur) {
+    // Scroll the move list itself, never the page (scrollIntoView would move the window too).
+    const top = cur.offsetTop; // .sheet is position: relative, so this is within the list
+    if (top < sheet.scrollTop) sheet.scrollTop = top;
+    else if (top + cur.offsetHeight > sheet.scrollTop + sheet.clientHeight) sheet.scrollTop = top + cur.offsetHeight - sheet.clientHeight;
+  }
   else if (!R.review) sheet.scrollTop = sheet.scrollHeight;
 }
 
@@ -976,11 +981,10 @@ function startReview(ply) {
   const s = R.s;
   if (!s.result) return;
   const rec = G.gameRecord(s, s.game);
-  const p = ply != null ? ply : firstNotedPly() || rec.moves.length;
+  const p = ply != null ? ply : Math.min(1, rec.moves.length); // start at the first move
   R.review = { game: s.game, ply: Math.max(0, Math.min(p, rec.moves.length)) };
   R.sel = null;
   render();
-  $('review-panel').scrollIntoView({ block: 'nearest' });
 }
 
 function firstNotedPly() {
@@ -1069,17 +1073,18 @@ function renderReview() {
   const nav = (label, text, to, disabled) =>
     el('button', { class: 'btn nav', type: 'button', 'aria-label': label, title: label, text, disabled, onclick: () => stepReview(to) });
   panel.replaceChildren(
-    el('div', { class: 'panel-head' },
+    el('div', { class: 'panel-head rv-head' },
       el('h2', { text: `Game review${plies.length || a.summaries.length ? ` · ${G.noteCount(s, R.review.game)} comment${G.noteCount(s, R.review.game) === 1 ? '' : 's'}` : ''}` }),
       el('button', { class: 'link-btn', type: 'button', text: 'Close review', onclick: () => { R.review = null; render(); } })),
     ...body,
     el('div', { class: 'rv-nav' },
-      nav('First position', '⏮', 0, ply === 0),
+      el('span', { class: 'nav-end' }, nav('First position', '⏮', 0, ply === 0)),
       nav('Previous move', '◀', ply - 1, ply === 0),
       nav('Next move', '▶', ply + 1, ply >= total),
-      nav('Last move', '⏭', total, ply >= total),
+      el('span', { class: 'nav-end' }, nav('Last move', '⏭', total, ply >= total)),
       el('button', { class: 'btn', type: 'button', text: 'Next comment', disabled: !plies.some((p) => p > ply), onclick: () => nextNoted(1) })),
-    el('p', { class: 'hint', text: 'Tip: ← and → step through the moves.' }),
+    el('p', { class: 'hint rv-tip', text: 'Tip: ← and → step through the moves.' }),
+    el('button', { class: 'btn rv-close-bottom', type: 'button', text: 'Close review', onclick: () => { R.review = null; render(); } }),
   );
 }
 

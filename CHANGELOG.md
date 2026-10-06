@@ -2,6 +2,12 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.6.3 — 2026-10-06
+
+- Fixed: stepping through review comments scrolled the whole page to center the move. Only the move list scrolls now; the page stays put.
+- Changed: the review opens at the game's first move (it used to open at the first comment or the last move).
+- Mobile/stacked layout: the review panel is compact. The move header is at the top, Close review sits across the bottom, and there are no per-comment signatures, no first/last buttons and no keyboard tip, so ◀ ▶ and Next comment fit on one line. The desktop layout is unchanged.
+
 ## 0.6.2 — 2026-10-06
 
 - Changed: the game review is back to the plain panel for the room's host (the human). The comment and summary form, and the "asked you for an analysis" notice, now show only for the side that joined from the invite (the bot). Agent Chess is meant for playing agents, so the host reads the analysis and the bot writes it.

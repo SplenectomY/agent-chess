@@ -352,7 +352,7 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 .panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 10px; }
 .mini-actions { display: flex; gap: 12px; }
 .sheet {
-  list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto;
+  list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; position: relative;
   display: grid; grid-template-columns: 2.6rem 1fr 1fr; font-variant-numeric: tabular-nums;
 }
 .sheet li { display: contents; }
@@ -389,6 +389,18 @@ details.panel[open] summary { margin-bottom: 10px; }
   background: var(--ink); color: var(--paper); padding: 10px 16px; font-weight: 600; max-width: calc(100vw - 32px);
 }
 
+/* Review panel: compact on stacked (mobile/tablet) layouts. */
+.rv-close-bottom { display: none; }
+.nav-end { display: contents; }
+@media (max-width: 900px) {
+  .review-panel { padding: 12px 14px; }
+  .review-panel .rv-head, .review-panel .rv-tip, .review-panel .rv-by, .review-panel .nav-end { display: none; }
+  .rv-where { font-size: 1.05rem; margin-bottom: 6px; }
+  .rv-nav { flex-wrap: nowrap; margin-top: 8px; }
+  .rv-nav .btn { flex: 1 1 0; min-width: 0; padding: 6px 8px; }
+  .rv-nav .btn:last-child { flex: 2 1 0; white-space: nowrap; }
+  .rv-close-bottom { display: flex; width: 100%; margin-top: 10px; min-height: 38px; }
+}
 @media (max-width: 900px) {
   .game { grid-template-columns: minmax(0, 1fr); }
   .board-col { max-width: 640px; width: 100%; margin: 0 auto; }
