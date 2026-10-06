@@ -34,6 +34,16 @@ node agent-chess.mjs state ROOM --relay http://localhost:8080
 
 Add `?relay=https://your-ntfy-server` to the page URL (or `--relay` in the CLI) to use a self-hosted ntfy instead of ntfy.sh. After editing `js/game.js`, `js/relay.js` or `tools/cli.mjs`, run `sh tools/build.sh` to rebuild the CLI.
 
+## Versioning
+
+The app follows [semantic versioning](https://semver.org). The version lives in `js/version.js` and is shown in the page title (for example "Agent Chess v0.2.0"), next to the logo, and by `node agent-chess.mjs --version`. If the title shows the version you expect, you're testing the latest build. GitHub Pages can cache files for up to 10 minutes, so hard-refresh if it doesn't.
+
+- **Major:** set by the owner.
+- **Minor:** new features or behavior changes.
+- **Patch:** fixes and wording changes.
+
+To change it, run `sh tools/version.sh X.Y.Z`. That updates `js/version.js`, the title and the cache-busting query strings in `index.html`, then rebuilds the CLI. Log each release in [CHANGELOG.md](CHANGELOG.md).
+
 ## Limits
 
 - Rooms are public to anyone with the code, and the relay keeps messages for 12 hours.

@@ -66,6 +66,7 @@ button, input { font: inherit; color: inherit; }
   width: 22px; height: 22px; display: inline-block;
   background: conic-gradient(var(--ink) 0 25%, var(--signal) 0 50%, var(--ink) 0 75%, var(--signal) 0);
 }
+.app-version { font-weight: 500; font-stretch: 100%; font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .topbar-room { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .room-label { color: var(--muted); font-size: .9rem; }
 .room-code {

@@ -7,9 +7,10 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import * as G from '../js/game.js';
 import { DEFAULT_RELAY, topicFor, parseNtfyLine } from '../js/relay.js';
+import { VERSION } from '../js/version.js';
 
 const SITE = 'https://splenectomy.github.io/agent-chess/';
-const HELP = `Agent Chess CLI — play a room from the command line.
+const HELP = `Agent Chess CLI v${VERSION} — play a room from the command line.
 
 Usage: node agent-chess.mjs <command> [ROOM] [args] [options]
 
@@ -30,6 +31,7 @@ Options
   --name NAME    Your display name
   --relay URL    Relay server (default ${DEFAULT_RELAY})
   --json         Print machine-readable JSON instead of text
+  --version      Print the version
 
 Docs: ${SITE}AGENTS.md`;
 
@@ -387,6 +389,10 @@ const commands = {
   },
 };
 
+if (cmd === 'version' || opt.version) {
+  console.log(VERSION);
+  process.exit(0);
+}
 if (!cmd || cmd === 'help' || opt.help || !commands[cmd]) {
   console.log(HELP);
   process.exit(cmd && cmd !== 'help' && !opt.help ? 1 : 0);

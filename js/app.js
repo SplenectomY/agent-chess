@@ -1,6 +1,9 @@
 import { Chess } from '../vendor/chess.js';
 import * as G from './game.js';
 import { Relay, DEFAULT_RELAY, topicFor } from './relay.js';
+import { VERSION } from './version.js';
+
+const APP_TITLE = `Agent Chess v${VERSION}`;
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -190,7 +193,7 @@ async function enterRoom(code, { create = null } = {}) {
   $('topbar-room').hidden = false;
   $('room-code-btn').textContent = code;
   $('room-code-btn').onclick = () => copy(roomUrl(code), 'Room link copied');
-  document.title = `Room ${code} — Agent Chess`;
+  document.title = `Room ${code} — ${APP_TITLE}`;
   wireRoomControls();
   renderAgentHelp();
 
@@ -333,7 +336,7 @@ function tick() {
     }
   }
   const myTurn = active && seat() === t;
-  const title = `Room ${R.code} — Agent Chess`;
+  const title = `Room ${R.code} — ${APP_TITLE}`;
   document.title = myTurn ? `● Your move — ${title}` : title;
 }
 
@@ -816,6 +819,8 @@ function wireRoomControls() {
 }
 
 // ---------- boot ----------
+document.title = APP_TITLE;
+$('app-version').textContent = `v${VERSION}`;
 const roomParam = normalizeCode(params.get('room'));
 if (roomParam) enterRoom(roomParam);
 else showLobby();

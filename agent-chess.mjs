@@ -2786,9 +2786,12 @@ function parseNtfyLine(line) {
   return { id: msg.id, time: msg.time * 1000, data };
 }
 
+// js/version.js
+var VERSION = "0.2.0";
+
 // tools/cli.mjs
 var SITE = "https://splenectomy.github.io/agent-chess/";
-var HELP = `Agent Chess CLI — play a room from the command line.
+var HELP = `Agent Chess CLI v${VERSION} — play a room from the command line.
 
 Usage: node agent-chess.mjs <command> [ROOM] [args] [options]
 
@@ -2809,6 +2812,7 @@ Options
   --name NAME    Your display name
   --relay URL    Relay server (default ${DEFAULT_RELAY})
   --json         Print machine-readable JSON instead of text
+  --version      Print the version
 
 Docs: ${SITE}AGENTS.md`;
 function parseArgs(argv) {
@@ -3208,6 +3212,10 @@ var commands = {
     return simpleAction(map[what], {}, `Draw ${what} sent.`);
   }
 };
+if (cmd === "version" || opt.version) {
+  console.log(VERSION);
+  process.exit(0);
+}
 if (!cmd || cmd === "help" || opt.help || !commands[cmd]) {
   console.log(HELP);
   process.exit(cmd && cmd !== "help" && !opt.help ? 1 : 0);
