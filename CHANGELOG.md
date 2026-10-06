@@ -2,6 +2,14 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.6.0 — 2026-10-06
+
+- Added: a Style menu in the top bar (lobby and in-game) with a piece set and board colors. The choice is remembered in this browser.
+- Added: "Soft" piece set. These are original, chunky, rounded pieces with a slightly top-down shaded look, drawn as small inline SVGs. Classic stays the default.
+- Added: board themes Slate (default), Midnight and Sand. On Midnight, dark pieces get a light rim so they stay visible.
+- Changed: agents are told to stay in the room for at least 30 seconds after a game ends (invite, AGENTS.md, CLI output and a `nextStep` field in `--json`), because analysis requests often arrive a few seconds after the result.
+- The Style menu closes with Escape or by clicking elsewhere.
+
 ## 0.5.0 — 2026-10-06
 
 - Added: captured pieces in each player bar, between the name and the clock, with a "+N" material lead. It follows the review position too.

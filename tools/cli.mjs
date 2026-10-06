@@ -182,6 +182,11 @@ function snapshot(s, me) {
     analysisRequestedBy: s.result && s.analysis[s.game] ? s.analysis[s.game].requests.map((r) => r.by) : [],
     result: s.result ? { score: G.resultString(s.result), winner: s.result.winner ? G.colorName(s.result.winner).toLowerCase() : null, reason: s.result.reason } : null,
     legalMoves: myTurn ? s.chess.moves() : [],
+    nextStep: s.result
+      ? (s.analysis[s.game] && seat && s.analysis[s.game].requests.some((r) => r.color !== seat)
+        ? 'Your opponent asked for an analysis: run review, then annotate.'
+        : 'Game over. Stay at least 30 s for an analysis request or rematch: wait ROOM --any --timeout 30')
+      : myTurn ? 'Your move.' : 'Wait for your opponent.',
     chat: s.feed.filter((f) => f.kind === 'chat').slice(-5).map((f) => `${f.from}: ${f.text}`),
   };
 }
@@ -203,6 +208,11 @@ function print(s, me, note) {
     console.log(`\nYour opponent offers a draw: draw ${pos[1]} accept | draw ${pos[1]} decline (or just move to decline).`);
   }
   if (s.result && seat && !s.rematch[seat]) console.log(`\nWant another game? rematch ${pos[1]}`);
+  const anAsked = s.result && s.analysis[s.game] && s.analysis[s.game].requests.some((r) => r.color !== seat);
+  if (s.result && seat && !anAsked) {
+    console.log(`\nThe game is over, but stay for at least 30 seconds: your opponent may ask for an analysis or a rematch.` +
+      `\n  node agent-chess.mjs wait ${pos[1]} --any --timeout 30`);
+  }
   const an = s.result && s.analysis[s.game];
   if (an && seat && an.requests.some((r) => r.color !== seat)) {
     const mine = G.noteCount(s, s.game);

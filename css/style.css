@@ -172,6 +172,51 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 .clock.flagged { opacity: 1; color: #ffb3ab; }
 .clock.untimed { font-size: 1rem; font-stretch: 100%; padding: 12px 14px; opacity: .8; }
 
+/* ---------- board themes ---------- */
+:root[data-board="midnight"] { --sq-light: #3d4d5a; --sq-dark: #283641; }
+:root[data-board="sand"] { --sq-light: #ecdfc6; --sq-dark: #b78e66; }
+:root[data-board="midnight"] .board { border-color: #141b22; }
+/* Dark pieces get a light rim on the dark board so they don't sink into it. */
+:root[data-board="midnight"] .soft.b { --pc-fill: #2b3440; --pc-side: #1a2029; --pc-top: #3e4a5a; --pc-edge: #a3b2c3; --pc-hi: #c0ccd8; }
+:root[data-board="midnight"] .piece.b, :root[data-board="midnight"] .drag-ghost.b { filter: drop-shadow(0 0 1px #a3b2c3) drop-shadow(0 0 1px #a3b2c3); }
+
+/* ---------- "Soft" piece set (SVG) ---------- */
+.soft { --pc-fill: #eef2f6; --pc-side: #aebbc8; --pc-top: #ffffff; --pc-edge: #56636f; --pc-hi: #ffffff; }
+.soft.b { --pc-fill: #4f5d6d; --pc-side: #2f3945; --pc-top: #6d7d91; --pc-edge: #151b23; --pc-hi: #9fb0c3; }
+.soft-svg { display: block; width: 1.22em; height: 1.22em; overflow: visible; }
+.cap-piece.soft .soft-svg { width: 1.05em; height: 1.05em; }
+.soft-svg .f, .soft-svg .s, .soft-svg .t { stroke: var(--pc-edge); stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.soft-svg .f { fill: var(--pc-fill); }
+.soft-svg .s { fill: var(--pc-side); }
+.soft-svg .t { fill: var(--pc-top); }
+.soft-svg .sh { fill: #0d1520; opacity: .16; }
+.soft-svg .hi { fill: var(--pc-hi); opacity: .85; }
+.soft-svg .hl { fill: none; stroke: var(--pc-hi); stroke-width: 2.6; stroke-linecap: round; opacity: .75; }
+.soft-svg .ln { fill: none; stroke: var(--pc-edge); stroke-width: 2.6; stroke-linecap: round; }
+.soft-svg .e { fill: var(--pc-edge); }
+.soft-svg .gs { fill: #000; opacity: .18; }
+.soft.b .soft-svg .sh { opacity: .28; }
+.soft.b .soft-svg .hl { opacity: .55; }
+
+/* ---------- Style menu ---------- */
+.topbar-right { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: flex-end; }
+.style-menu { position: relative; }
+.style-menu summary {
+  list-style: none; cursor: pointer; border: 1.5px solid var(--line); padding: 3px 10px; font-weight: 650; font-size: .92rem;
+}
+.style-menu summary::-webkit-details-marker { display: none; }
+.style-menu summary::after { content: ' ▾'; color: var(--muted); }
+.style-menu[open] summary { border-color: var(--ink); }
+.style-pop {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; background: var(--surface); border: 1.5px solid var(--ink);
+  padding: 12px; display: grid; gap: 10px; width: 230px; box-shadow: 0 6px 0 color-mix(in srgb, var(--ink) 12%, transparent);
+}
+.style-pop label { display: grid; grid-template-columns: 4rem 1fr; align-items: center; gap: 8px; font-weight: 650; font-size: .92rem; }
+.style-pop select { min-height: 36px; border: 1.5px solid var(--line); background: var(--paper); font: inherit; color: inherit; padding: 0 6px; }
+.look-preview { display: grid; grid-template-columns: repeat(6, 1fr); border: 1.5px solid var(--ink); }
+.lp-sq { aspect-ratio: 1; background: var(--sq-light); display: grid; place-items: center; container-type: size; }
+.lp-sq.dark { background: var(--sq-dark); }
+
 /* captured pieces, between the name and the clock */
 .pb-captures {
   flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap;

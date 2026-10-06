@@ -2,6 +2,7 @@ import { Chess } from '../vendor/chess.js';
 import * as G from './game.js';
 import { Relay, DEFAULT_RELAY, topicFor } from './relay.js';
 import { VERSION } from './version.js';
+import { SOFT_SVG, PIECE_SETS, BOARD_THEMES } from './pieces.js';
 
 const APP_TITLE = `Agent Chess v${VERSION}`;
 
@@ -68,10 +69,60 @@ async function copy(text, what = 'Copied') {
 // Glyphs are drawn with CSS (content: attr(data-g)) so they never show up in the page's
 // text: agents reading the page get square names and the text state, not symbol noise.
 function pieceNode(color, type, cls = 'piece') {
+  if (LOOK.pieces === 'soft') {
+    const node = el('span', { class: `${cls} ${color} soft`, 'aria-hidden': 'true' });
+    node.innerHTML = SOFT_SVG[type];
+    return node;
+  }
   return el('span', { class: `${cls} ${color}`, 'aria-hidden': 'true' },
     el('span', { class: 'fill', 'data-g': GLYPH[type] + VS }),
     el('span', { class: 'outline', 'data-g': (color === 'w' ? OUTLINE[type] : GLYPH[type]) + VS }));
 }
+
+// ---------- look: piece set and board colors (per viewer, remembered in this browser) ----------
+const LOOK = {
+  pieces: PIECE_SETS[store.get('agentchess:pieces')] ? store.get('agentchess:pieces') : 'classic',
+  board: BOARD_THEMES[store.get('agentchess:board')] ? store.get('agentchess:board') : 'slate',
+};
+function applyLook() {
+  document.documentElement.dataset.board = LOOK.board;
+  document.documentElement.dataset.pieces = LOOK.pieces;
+}
+function wireStyleMenu() {
+  const fill = (sel, options, value) => {
+    sel.replaceChildren(...Object.entries(options).map(([k, label]) => el('option', { value: k, text: label, selected: k === value })));
+  };
+  const pieces = $('look-pieces');
+  const board = $('look-board');
+  fill(pieces, PIECE_SETS, LOOK.pieces);
+  fill(board, BOARD_THEMES, LOOK.board);
+  const changed = () => {
+    LOOK.pieces = pieces.value;
+    LOOK.board = board.value;
+    store.set('agentchess:pieces', LOOK.pieces);
+    store.set('agentchess:board', LOOK.board);
+    applyLook();
+    if (R.s && R.s.room) renderBoard();
+    renderLookPreview();
+  };
+  pieces.addEventListener('change', changed);
+  board.addEventListener('change', changed);
+  // Close the menu when clicking elsewhere.
+  document.addEventListener('pointerdown', (e) => {
+    const menu = $('style-menu');
+    if (menu.open && !menu.contains(e.target)) menu.open = false;
+  });
+  $('style-menu').addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { $('style-menu').open = false; $('style-menu').querySelector('summary').focus(); }
+  });
+  renderLookPreview();
+}
+function renderLookPreview() {
+  const box = $('look-preview');
+  box.replaceChildren(...['k', 'q', 'r', 'b', 'n', 'p'].map((t, i) =>
+    el('span', { class: `lp-sq${i % 2 ? ' dark' : ''}` }, pieceNode(i < 3 ? 'w' : 'b', t))));
+}
+applyLook();
 
 // ---------- captured pieces ----------
 const START_COUNT = { p: 8, n: 2, b: 2, r: 2, q: 1 };
@@ -816,7 +867,7 @@ function inviteText(s) {
     `   Wait for news:  curl -s --max-time 20 "${topicUrl}/json?since=<last message id>"   (returns after 20 s at most)`,
     '   The relay only stores messages: you track the position yourself and watch for resign, draw offers and the result. Your clock starts when you join, so set up first.',
     '',
-    'After the game I may ask you for a short analysis: comments on key moves that show up next to the moves on my screen. The details are in the rules link below.',
+    'When the game ends, don\'t leave yet: stay in the room for at least 30 seconds (CLI: node agent-chess.mjs wait ROOM --any --timeout 30). I may ask for a short analysis (comments on key moves that show up next to them on my screen) or a rematch. The details are in the rules link below.',
     `Full rules and message formats: ${siteBase()}AGENTS.md`,
     'Feel free to chat in the room too: {"type":"chat","id":"...","text":"good luck"}',
   ].join('\n');
@@ -1147,6 +1198,7 @@ function wireRoomControls() {
 }
 
 // ---------- boot ----------
+wireStyleMenu();
 document.title = APP_TITLE;
 $('app-version').textContent = `v${VERSION}`;
 const roomParam = normalizeCode(params.get('room'));
