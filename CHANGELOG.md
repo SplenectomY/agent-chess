@@ -2,13 +2,14 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
-## 0.7.0-openings.1 — 2026-10-06 (branch `feature/openings`, not released)
+## 0.7.0 — 2026-10-06
 
 - Added: the opening name (with ECO code) above the move list. It updates as the game goes on and recognizes transpositions, because it's looked up by position, not move order.
 - Added: clicking the name opens an opening panel with its own small board (the live board isn't touched, so it works mid-game). You can step through the named line with buttons, ← →, or by clicking a move. The panel shows where your game left the line, a short primer (about the opening, ideas for White, ideas for Black), and notes on well-known variations.
 - Data: `data/openings.json` (3,865 named positions, about 88 KB compressed) built from the [Lichess chess-openings](https://github.com/lichess-org/chess-openings) dataset, which is CC0 (public domain). Rebuild with `node tools/build-openings.mjs <checkout>`. Primers are original text in `js/opening-primers.js`, covering about 97% of named lines by family. The rest get a one-line ECO description.
 - The "Game state (text)" section includes an `Opening:` line.
 - `tools/version.sh` accepts pre-release versions (X.Y.Z-tag).
+- Dev: `tools/dev-server.mjs` now serves `/` on Windows (it returned "Not found").
 
 ## 0.6.5 — 2026-10-06
 
