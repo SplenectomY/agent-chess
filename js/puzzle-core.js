@@ -39,9 +39,9 @@ export const PUZZLE_TOPIC_PREFIX = 'agentchess-puzzle-v1-';
 export const ID_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
 const TEXT_MAX = 2000;
 
-const str = (v, max = TEXT_MAX) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+export const str = (v, max = TEXT_MAX) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
-function tryMove(chess, text) {
+export function tryMove(chess, text) {
   if (typeof text !== 'string' || !text.trim()) return null;
   const t = text.trim();
   try {
@@ -53,35 +53,21 @@ function tryMove(chess, text) {
   }
 }
 
-// Returns { ok, errors: [...], warnings: [...], puzzle } where puzzle is normalized:
-// moves in SAN, plus uci/from/to and the position before each step.
-export function validatePuzzle(input) {
-  const errors = [];
-  const warnings = [];
-  let p = input;
-  if (typeof p === 'string') {
-    try { p = JSON.parse(p); } catch (e) { return { ok: false, errors: [`Not valid JSON: ${e.message}`], warnings, puzzle: null }; }
-  }
-  if (!p || typeof p !== 'object') return { ok: false, errors: ['The puzzle must be a JSON object.'], warnings, puzzle: null };
-  const chess = new Chess();
-  try {
-    chess.load(String(p.fen || ''));
-  } catch (e) {
-    return { ok: false, errors: [`"fen" isn't a valid position: ${e.message}`], warnings, puzzle: null };
-  }
-  if (!Array.isArray(p.line) || !p.line.length) errors.push('"line" must be a non-empty list of moves.');
-  const opponentFirst = !!p.opponentFirst;
-  const solverColor = opponentFirst ? (chess.turn() === 'w' ? 'b' : 'w') : chess.turn();
+// Validates a solving line (alternating solver / opponent moves) from `fen` and returns the
+// normalized steps: moves in SAN plus uci/from/to and the positions before and after.
+// Problems are pushed onto `errors` / `warnings`. Shared by puzzles and lesson tasks.
+export function validateLine({ fen, line, opponentFirst = false, errors, warnings, label = 'line' }) {
+  const chess = new Chess(fen);
   const steps = [];
   const lastSolverIdx = (() => {
     let idx = -1;
-    (p.line || []).forEach((_, i) => { if ((i % 2 === 0) !== opponentFirst) idx = i; });
+    line.forEach((_, i) => { if ((i % 2 === 0) !== opponentFirst) idx = i; });
     return idx;
   })();
-  (p.line || []).forEach((raw, i) => {
+  line.forEach((raw, i) => {
     const step = typeof raw === 'string' ? { move: raw } : raw || {};
     const solver = (i % 2 === 0) !== opponentFirst;
-    const where = `line[${i}] (${solver ? 'your move' : "opponent's reply"})`;
+    const where = `${label}[${i}] (${solver ? 'your move' : "opponent's reply"})`;
     const fenBefore = chess.fen();
     // Alternatives and wrong moves are checked in the position before this step.
     const check = (text) => tryMove(new Chess(fenBefore), text);
@@ -162,9 +148,31 @@ export function validatePuzzle(input) {
     }
     steps.push(out);
   });
-  if (steps.length && !errors.length) {
-    const last = steps[steps.length - 1];
-    if (!last.solver) warnings.push("The line ends with the opponent's move. Usually a puzzle ends on the solver's move.");
+  return steps;
+}
+
+// Returns { ok, errors: [...], warnings: [...], puzzle } where puzzle is normalized:
+// moves in SAN, plus uci/from/to and the position before each step.
+export function validatePuzzle(input) {
+  const errors = [];
+  const warnings = [];
+  let p = input;
+  if (typeof p === 'string') {
+    try { p = JSON.parse(p); } catch (e) { return { ok: false, errors: [`Not valid JSON: ${e.message}`], warnings, puzzle: null }; }
+  }
+  if (!p || typeof p !== 'object') return { ok: false, errors: ['The puzzle must be a JSON object.'], warnings, puzzle: null };
+  const chess = new Chess();
+  try {
+    chess.load(String(p.fen || ''));
+  } catch (e) {
+    return { ok: false, errors: [`"fen" isn't a valid position: ${e.message}`], warnings, puzzle: null };
+  }
+  if (!Array.isArray(p.line) || !p.line.length) errors.push('"line" must be a non-empty list of moves.');
+  const opponentFirst = !!p.opponentFirst;
+  const solverColor = opponentFirst ? (chess.turn() === 'w' ? 'b' : 'w') : chess.turn();
+  const steps = validateLine({ fen: chess.fen(), line: p.line || [], opponentFirst, errors, warnings });
+  if (steps.length && !errors.length && !steps[steps.length - 1].solver) {
+    warnings.push("The line ends with the opponent's move. Usually a puzzle ends on the solver's move.");
   }
   const puzzle = errors.length ? null : {
     v: PUZZLE_VERSION,

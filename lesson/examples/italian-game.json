@@ -1,0 +1,221 @@
+{
+  "title": "The Italian Game: your first opening",
+  "author": "Agent Chess",
+  "level": "Beginner",
+  "primer": "The Italian Game (1.e4 e5 2.Nf3 Nc6 3.Bc4) is one of the oldest openings in chess, and still one of the best for learning, because every move follows a simple principle.\n\n### What you'll learn\n- The three jobs of the opening: **control the center**, **develop your pieces**, **castle your king to safety**.\n- Why the f7 square (f2 for White) is the weakest point at the start of the game.\n- A simple plan for the middlegame: c3 and d4.\n\n### How this lesson works\nUse **Next** and **Back** (or the arrow keys) to move through the slides. Arrows and colored squares on the board point out the ideas. On slides marked *your turn*, you make the move yourself: there are hints if you get stuck, and a wrong move stays on the board so you can see why it doesn't work.",
+  "slides": [
+    {
+      "title": "Three jobs in the opening",
+      "text": "At the start, both sides want the same things:\n\n- **The center.** The four yellow squares are the most valuable on the board. Pieces in the center reach more squares.\n- **Development.** Get your knights and bishops off the back rank, ideally one move each.\n- **King safety.** Castle early, before the center opens up.\n\nWatch how each move in the Italian Game does at least one of these jobs.",
+      "highlights": [
+        {
+          "square": "d4",
+          "color": "yellow"
+        },
+        {
+          "square": "e4",
+          "color": "yellow"
+        },
+        {
+          "square": "d5",
+          "color": "yellow"
+        },
+        {
+          "square": "e5",
+          "color": "yellow"
+        }
+      ]
+    },
+    {
+      "title": "1.e4: grab the center",
+      "moves": [
+        "e4"
+      ],
+      "tag": "book",
+      "text": "White's pawn takes a central square. Just as important, it **opens two diagonals**: one for the queen (to h5) and one for the light-squared bishop (to c4 and beyond).",
+      "arrows": [
+        {
+          "from": "d1",
+          "to": "h5",
+          "color": "blue"
+        },
+        {
+          "from": "f1",
+          "to": "c4",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "title": "1...e5: Black does the same",
+      "moves": [
+        "e5"
+      ],
+      "tag": "book",
+      "text": "Black answers with the same idea: a pawn in the center, and open lines for Black's queen and bishop. Now the e5 pawn is a target, though. It isn't defended by anything yet."
+    },
+    {
+      "title": "Your move: develop with a threat",
+      "text": "The best developing moves often come with a threat, so your opponent has to react instead of following their own plan.",
+      "task": {
+        "prompt": "Develop a piece **and** attack Black's e5 pawn at the same time.",
+        "line": [
+          {
+            "move": "Nf3",
+            "tag": "book",
+            "hints": [
+              "Knights belong in the center: from f3 or c3 they reach many squares.",
+              "Which knight move puts pressure on e5?"
+            ],
+            "explain": "The knight develops toward the center and attacks e5.",
+            "wrong": {
+              "Qh5": {
+                "text": "It does attack e5, but the queen comes out too early. Black will develop with gain of time, for example ...Nc6 and ...Nf6 hitting the queen.",
+                "tag": "inaccuracy"
+              },
+              "Nc3": "A fine developing move, but it doesn't attack e5.",
+              "Bc4": "A good square for the bishop, but it doesn't attack e5. Develop the knight first.",
+              "*": "Look for a knight move that hits e5."
+            }
+          }
+        ],
+        "done": "**Nf3** is the most popular second move in chess. Black now has to deal with the threat to e5."
+      }
+    },
+    {
+      "title": "2...Nc6: defend and develop",
+      "moves": [
+        "Nc6"
+      ],
+      "tag": "book",
+      "text": "Black defends e5 with a developing move of their own. The knight on c6 also eyes the central squares d4 and b4.",
+      "arrows": [
+        {
+          "from": "c6",
+          "to": "e5",
+          "color": "green"
+        },
+        {
+          "from": "f3",
+          "to": "e5",
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "title": "Your move: aim at the weak spot",
+      "text": "Now bring out a bishop. In the Italian Game, it goes to its most aggressive square.",
+      "task": {
+        "prompt": "Develop your light-squared bishop to the square where it aims at Black's weakest point, **f7**.",
+        "line": [
+          {
+            "move": "Bc4",
+            "tag": "book",
+            "hints": [
+              "The bishop travels along the diagonal that 1.e4 opened.",
+              "Which square on that diagonal points straight at f7?"
+            ],
+            "explain": "This is the Italian Game.",
+            "wrong": {
+              "Bb5": {
+                "text": "That's the Ruy Lopez, a great opening too, but the bishop pins the c6 knight instead of aiming at f7.",
+                "tag": "book"
+              },
+              "Be2": "Solid, but from e2 the bishop doesn't put pressure on anything.",
+              "Bd3": "This blocks your own d-pawn, so your other bishop has trouble getting out.",
+              "*": "Move the bishop that started on f1."
+            }
+          }
+        ],
+        "done": "**3.Bc4** completes the Italian Game."
+      }
+    },
+    {
+      "title": "Why f7?",
+      "text": "At the start of the game, f7 is defended **only by Black's king**. That makes it the natural target for an early attack: the bishop on c4 is already aiming at it, and later the knight (from g5) or the queen can join in.\n\nThe same is true of f2 for White. Remember that when it's *your* king.",
+      "arrows": [
+        {
+          "from": "c4",
+          "to": "f7",
+          "color": "red"
+        }
+      ],
+      "highlights": [
+        {
+          "square": "f7",
+          "color": "red"
+        },
+        {
+          "square": "e8",
+          "color": "yellow"
+        }
+      ]
+    },
+    {
+      "title": "3...Bc5: the Giuoco Piano",
+      "moves": [
+        "Bc5"
+      ],
+      "tag": "book",
+      "text": "Black mirrors White: the bishop comes to c5 and aims at f2. This is the **Giuoco Piano**, Italian for \"the quiet game\". Both sides have developed two pieces and both kings are ready to castle.",
+      "arrows": [
+        {
+          "from": "c5",
+          "to": "f2",
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "title": "Your move: king safety",
+      "text": "Your knight and bishop have left the back rank, so the squares between your king and the h1 rook are empty.",
+      "task": {
+        "prompt": "Get your king to safety before the fighting starts.",
+        "line": [
+          {
+            "move": "O-O",
+            "tag": "good",
+            "hints": [
+              "There's a special move that moves two pieces at once.",
+              "Castle kingside: the king goes to g1 and the rook to f1. You can type O-O or drag the king two squares."
+            ],
+            "explain": "The king is tucked away on g1 and the rook comes toward the center.",
+            "wrong": {
+              "Ng5": "This moves the same piece twice and attacks f7 with only two pieces. Black can defend calmly, for example with ...Nh6, and is ahead in development.",
+              "c3": "c3 is also a main line (it prepares d4), but the job here is king safety first.",
+              "d3": "A solid move, but the job here is king safety first.",
+              "*": "Look for the move that brings the king to safety."
+            }
+          }
+        ],
+        "done": "In four moves you've followed all three opening principles: center, development, king safety."
+      }
+    },
+    {
+      "title": "4...Nf6 and White's plan",
+      "moves": [
+        "Nf6"
+      ],
+      "tag": "book",
+      "text": "Black develops the last minor piece and attacks the e4 pawn.\n\n- First White deals with that: the calm **d3** defends e4 (this line is called the *Giuoco Pianissimo*, \"the very quiet game\"). **Nc3** or **Re1** are other ways.\n- Later White often prepares **c3** and **d4**, building a big pawn center that also attacks the c5 bishop.\n\nYou don't need to memorize more moves than this. If you follow the principles, you'll find good moves on your own.",
+      "arrows": [
+        {
+          "from": "f6",
+          "to": "e4",
+          "color": "red"
+        },
+        {
+          "from": "d2",
+          "to": "d3",
+          "color": "blue"
+        },
+        {
+          "from": "c2",
+          "to": "c3",
+          "color": "blue"
+        }
+      ]
+    }
+  ],
+  "conclusion": "You played the Italian Game: **1.e4 e5 2.Nf3 Nc6 3.Bc4 Bc5 4.O-O Nf6**.\n\n- Every move either took the center, developed a piece with a purpose, or made the king safe.\n- The bishop on c4 aims at f7, the weakest square in Black's camp.\n- Next time you play White, try it and see how quickly your pieces come out."
+}

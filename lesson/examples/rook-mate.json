@@ -1,0 +1,159 @@
+{
+  "title": "Checkmate with king and rook",
+  "author": "Agent Chess",
+  "level": "Beginner",
+  "primer": "A king and rook against a lone king is always a win, but only if you know the method. If you push the rook around without a plan, the enemy king keeps slipping away and the game can end in a draw by the fifty-move rule.\n\n### The method in four steps\n- **Fence**: use the rook to cut the enemy king off along a rank or file.\n- **Approach**: bring your own king up. The rook can't checkmate on its own.\n- **Squeeze**: push the fence one line closer whenever the kings face each other.\n- **Mate**: when the enemy king is on the edge and the kings face each other, the rook checks along the edge.\n\nYou'll see each step, then deliver the mate yourself twice.",
+  "orientation": "w",
+  "slides": [
+    {
+      "title": "The goal: drive the king to the edge",
+      "fen": "8/8/8/4k3/8/8/8/R3K3 w - - 0 1",
+      "text": "With only a rook, you can checkmate the king **only on the edge of the board**. In the middle it always has an escape square. So the whole plan is about herding the king toward an edge, then finishing it off.",
+      "highlights": [
+        {
+          "square": "e5",
+          "color": "yellow"
+        }
+      ]
+    },
+    {
+      "title": "Step 1: build a fence",
+      "moves": [
+        "Ra4"
+      ],
+      "tag": "good",
+      "text": "The rook now controls the whole 4th rank. The black king **can't cross it**: it's stuck on the top half of the board. That's the fence.\n\nNotice the rook is far away from the king. Keep it at a distance so the king can't attack it.",
+      "arrows": [
+        {
+          "from": "a4",
+          "to": "h4",
+          "color": "red"
+        }
+      ],
+      "highlights": [
+        {
+          "square": "d4",
+          "color": "red"
+        },
+        {
+          "square": "e4",
+          "color": "red"
+        },
+        {
+          "square": "f4",
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "title": "Step 2: bring the king",
+      "moves": [
+        "Kd5",
+        "Ke2"
+      ],
+      "text": "Black's king walks around, but it can't get past the fence. Meanwhile White's king comes up the board. The rook holds the fence and the king does the rest: you'll need it to take escape squares away.",
+      "arrows": [
+        {
+          "from": "e2",
+          "to": "e3",
+          "color": "blue"
+        }
+      ]
+    },
+    {
+      "title": "Step 3: squeeze",
+      "text": "Keep walking your king up. When the two kings stand **directly facing each other** (one square between them on the same file or rank), the enemy king can't step toward yours. That's the moment for a rook check along the fence: it drives the king back one more line, and the fence moves up behind it.\n\nRepeat until the black king is pushed onto the edge. Let's jump ahead to the final picture."
+    },
+    {
+      "title": "Your move: the mate",
+      "fen": "4k3/8/4K3/8/8/8/8/R7 w - - 0 1",
+      "text": "The black king is on the edge, and the kings face each other on the e-file. White's king covers d7, e7 and f7.",
+      "highlights": [
+        {
+          "square": "d7",
+          "color": "yellow"
+        },
+        {
+          "square": "e7",
+          "color": "yellow"
+        },
+        {
+          "square": "f7",
+          "color": "yellow"
+        }
+      ],
+      "task": {
+        "prompt": "Checkmate in one move.",
+        "line": [
+          {
+            "move": "Ra8#",
+            "tag": "best",
+            "hints": [
+              "The king's escape squares on the 7th rank are already covered by your king.",
+              "Check along the edge."
+            ],
+            "explain": "The rook checks the whole 8th rank and the king can't escape.",
+            "wrong": {
+              "*": "Black's king is on the 8th rank. Which rook move checks along it?"
+            }
+          }
+        ],
+        "done": "That's the basic mating picture: **king facing king, rook checking along the edge**."
+      }
+    },
+    {
+      "title": "Why the kings must face each other",
+      "fen": "4k3/8/3K4/8/8/8/8/R7 w - - 0 1",
+      "text": "Here White's king is on d6, one file to the side. Now **Ra8+ doesn't mate**: White's king doesn't cover f7, so Black just plays ...Kf7 and walks away.\n\nInstead, fence the king in first, for example with **Ra7**, which keeps it on the back rank. After ...Kd8 the kings face each other and Ra8 is mate. After ...Kf8, White's king follows with Ke6, and the same picture soon comes again.",
+      "arrows": [
+        {
+          "from": "a1",
+          "to": "a8",
+          "color": "red"
+        },
+        {
+          "from": "e8",
+          "to": "f7",
+          "color": "green"
+        }
+      ],
+      "highlights": [
+        {
+          "square": "f7",
+          "color": "green"
+        }
+      ]
+    },
+    {
+      "title": "Your move: the corner",
+      "fen": "7k/8/6K1/8/8/8/8/R7 w - - 0 1",
+      "text": "The same idea works in the corner. White's king on g6 takes away g7 and h7.",
+      "task": {
+        "prompt": "Checkmate in one move.",
+        "line": [
+          {
+            "move": "Ra8#",
+            "tag": "best",
+            "hints": [
+              "Which squares can Black's king still reach? Only g8.",
+              "Check along the 8th rank so g8 is covered too."
+            ],
+            "explain": "The rook covers the whole back rank, including g8.",
+            "wrong": {
+              "Rh1+": {
+                "text": "It's check, but the king escapes to g8. A check along the h-file doesn't cover the 8th rank.",
+                "tag": "mistake",
+                "replies": [
+                  "Kg8"
+                ]
+              },
+              "*": "Look for a rook check that covers g8 as well."
+            }
+          }
+        ],
+        "done": "In the corner the king has even fewer squares, so the mate is easier."
+      }
+    }
+  ],
+  "conclusion": "**Fence, approach, squeeze, mate.**\n\n- The rook builds a fence from a distance; the king does the walking.\n- Push the fence closer when the kings face each other.\n- Mate comes on the edge with the kings facing each other and the rook checking along the edge.\n\nPractice it against a friend or an engine from random starting positions until you can do it without thinking."
+}

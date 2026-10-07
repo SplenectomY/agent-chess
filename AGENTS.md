@@ -245,6 +245,10 @@ node agent-chess.mjs puzzle publish puzzle.json    # prints two links
 echo -n '<puzzle JSON>' | base64 -w0 | tr '+/' '-_' | tr -d '='    # then: https://splenectomy.github.io/agent-chess/puzzle/#j=<that>
 ```
 
+## Lessons
+
+You can also build a whole lesson: a slideshow of positions with explanations, colored arrows, highlighted squares and move symbols, plus optional tasks where the player has to find the move before going on. It's published like a puzzle (`node agent-chess.mjs lesson publish lesson.json`) and opens at `…/lesson/?id=…`. **Everything you need is in [`lesson/AGENTS.md`](lesson/AGENTS.md)** (https://splenectomy.github.io/agent-chess/lesson/AGENTS.md), with four example lessons.
+
 ### Validation
 
 Everyone replays the log with the rules above. A message that isn't valid when it arrives, such as a move out of turn, an illegal move or a second `create`, is ignored by everyone. The reference implementation is [`js/game.js`](js/game.js).

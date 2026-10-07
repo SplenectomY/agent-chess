@@ -1,0 +1,164 @@
+{
+  "title": "Scholar's Mate and how to stop it",
+  "author": "Agent Chess",
+  "level": "Beginner",
+  "primer": "**Scholar's Mate** is the four-move checkmate that catches almost every beginner once. White's queen and bishop team up against f7, the square only Black's king defends.\n\nThis lesson is a short slideshow with no moves to make. First you'll see the trap, then the simple way to defend against it. The board is shown from Black's side, because Black is the one who needs to know this.",
+  "orientation": "b",
+  "slides": [
+    {
+      "title": "1.e4 e5",
+      "moves": [
+        "e4",
+        "e5"
+      ],
+      "text": "A normal start. Both sides take the center and open lines for their queen and light-squared bishop."
+    },
+    {
+      "title": "2.Qh5: the queen comes out",
+      "moves": [
+        "Qh5"
+      ],
+      "tag": "inaccuracy",
+      "text": "Bringing the queen out this early is usually bad, but it sets two threats: **Qxe5+** and, later, **Qxf7**. You have to deal with them.",
+      "arrows": [
+        {
+          "from": "h5",
+          "to": "e5",
+          "color": "red"
+        },
+        {
+          "from": "h5",
+          "to": "f7",
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "title": "2...Nc6: defend e5",
+      "moves": [
+        "Nc6"
+      ],
+      "tag": "good",
+      "text": "Black defends the e5 pawn with a developing move. So far, so good.",
+      "arrows": [
+        {
+          "from": "c6",
+          "to": "e5",
+          "color": "green"
+        }
+      ]
+    },
+    {
+      "title": "3.Bc4: two attackers on f7",
+      "moves": [
+        "Bc4"
+      ],
+      "text": "Now the bishop joins the queen. **Two white pieces attack f7, and only the king defends it.** White threatens Qxf7, and it would be checkmate.",
+      "arrows": [
+        {
+          "from": "c4",
+          "to": "f7",
+          "color": "red"
+        },
+        {
+          "from": "h5",
+          "to": "f7",
+          "color": "red"
+        }
+      ],
+      "highlights": [
+        {
+          "square": "f7",
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "title": "3...Nf6?? ignores the threat",
+      "moves": [
+        "Nf6"
+      ],
+      "tag": "blunder",
+      "text": "Black attacks the queen and develops a piece: it looks natural. But it does nothing about f7.",
+      "arrows": [
+        {
+          "from": "f6",
+          "to": "h5",
+          "color": "blue"
+        },
+        {
+          "from": "h5",
+          "to": "f7",
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "title": "4.Qxf7#",
+      "moves": [
+        "Qxf7#"
+      ],
+      "text": "Checkmate. The queen on f7 is protected by the bishop on c4, so the king can't take it, and every escape square is covered or blocked by Black's own pieces.",
+      "highlights": [
+        {
+          "square": "f7",
+          "color": "red"
+        },
+        {
+          "square": "e8",
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "title": "The defense: 3...g6!",
+      "fen": "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+      "moves": [
+        "e4",
+        "e5",
+        "Qh5",
+        "Nc6",
+        "Bc4",
+        "g6"
+      ],
+      "tag": "best",
+      "text": "Back to the position before the mistake. **3...g6** blocks the queen's line to f7 **and** attacks the queen, so White has to spend a move on it.",
+      "arrows": [
+        {
+          "from": "g6",
+          "to": "h5",
+          "color": "green"
+        }
+      ],
+      "highlights": [
+        {
+          "square": "f7",
+          "color": "green"
+        }
+      ]
+    },
+    {
+      "title": "4.Qf3 Nf6: threat over",
+      "moves": [
+        "Qf3",
+        "Nf6"
+      ],
+      "tag": "good",
+      "text": "White renews the attack on f7 from f3, but **4...Nf6** blocks that line too, and develops a piece. f7 is safe, and White's queen has moved twice while Black developed.\n\n(3...Qe7, defending f7 directly, also works.)",
+      "arrows": [
+        {
+          "from": "f6",
+          "to": "f3",
+          "color": "blue"
+        }
+      ],
+      "highlights": [
+        {
+          "square": "f7",
+          "color": "green"
+        }
+      ]
+    }
+  ],
+  "conclusion": "**Watch f7.** Whenever White's queen and bishop both aim at it, stop and defend before doing anything else.\n\n- Block the line (...g6, ...Nf6) or defend the square (...Qe7).\n- Gain time by attacking the early queen with your pieces.\n- If you're White: Scholar's Mate works only against careless defense. Against good play, the early queen just loses time."
+}

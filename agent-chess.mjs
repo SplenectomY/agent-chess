@@ -2988,42 +2988,21 @@ function tryMove2(chess, text) {
     return null;
   }
 }
-function validatePuzzle(input) {
-  const errors = [];
-  const warnings = [];
-  let p = input;
-  if (typeof p === "string") {
-    try {
-      p = JSON.parse(p);
-    } catch (e) {
-      return { ok: false, errors: [`Not valid JSON: ${e.message}`], warnings, puzzle: null };
-    }
-  }
-  if (!p || typeof p !== "object")
-    return { ok: false, errors: ["The puzzle must be a JSON object."], warnings, puzzle: null };
-  const chess = new Chess;
-  try {
-    chess.load(String(p.fen || ""));
-  } catch (e) {
-    return { ok: false, errors: [`"fen" isn't a valid position: ${e.message}`], warnings, puzzle: null };
-  }
-  if (!Array.isArray(p.line) || !p.line.length)
-    errors.push('"line" must be a non-empty list of moves.');
-  const opponentFirst = !!p.opponentFirst;
-  const solverColor = opponentFirst ? chess.turn() === "w" ? "b" : "w" : chess.turn();
+function validateLine({ fen, line, opponentFirst = false, errors, warnings, label = "line" }) {
+  const chess = new Chess(fen);
   const steps = [];
   const lastSolverIdx = (() => {
     let idx = -1;
-    (p.line || []).forEach((_, i) => {
+    line.forEach((_, i) => {
       if (i % 2 === 0 !== opponentFirst)
         idx = i;
     });
     return idx;
   })();
-  (p.line || []).forEach((raw, i) => {
+  line.forEach((raw, i) => {
     const step = typeof raw === "string" ? { move: raw } : raw || {};
     const solver = i % 2 === 0 !== opponentFirst;
-    const where = `line[${i}] (${solver ? "your move" : "opponent's reply"})`;
+    const where = `${label}[${i}] (${solver ? "your move" : "opponent's reply"})`;
     const fenBefore = chess.fen();
     const check = (text) => tryMove2(new Chess(fenBefore), text);
     const mv = tryMove2(chess, step.move);
@@ -3126,10 +3105,34 @@ function validatePuzzle(input) {
     }
     steps.push(out);
   });
-  if (steps.length && !errors.length) {
-    const last = steps[steps.length - 1];
-    if (!last.solver)
-      warnings.push("The line ends with the opponent's move. Usually a puzzle ends on the solver's move.");
+  return steps;
+}
+function validatePuzzle(input) {
+  const errors = [];
+  const warnings = [];
+  let p = input;
+  if (typeof p === "string") {
+    try {
+      p = JSON.parse(p);
+    } catch (e) {
+      return { ok: false, errors: [`Not valid JSON: ${e.message}`], warnings, puzzle: null };
+    }
+  }
+  if (!p || typeof p !== "object")
+    return { ok: false, errors: ["The puzzle must be a JSON object."], warnings, puzzle: null };
+  const chess = new Chess;
+  try {
+    chess.load(String(p.fen || ""));
+  } catch (e) {
+    return { ok: false, errors: [`"fen" isn't a valid position: ${e.message}`], warnings, puzzle: null };
+  }
+  if (!Array.isArray(p.line) || !p.line.length)
+    errors.push('"line" must be a non-empty list of moves.');
+  const opponentFirst = !!p.opponentFirst;
+  const solverColor = opponentFirst ? chess.turn() === "w" ? "b" : "w" : chess.turn();
+  const steps = validateLine({ fen: chess.fen(), line: p.line || [], opponentFirst, errors, warnings });
+  if (steps.length && !errors.length && !steps[steps.length - 1].solver) {
+    warnings.push("The line ends with the opponent's move. Usually a puzzle ends on the solver's move.");
   }
   const puzzle = errors.length ? null : {
     v: PUZZLE_VERSION,
@@ -3182,7 +3185,165 @@ function joinParts(events) {
 }
 
 // js/version.js
-var VERSION = "0.10.0";
+var VERSION = "0.11.0";
+
+// js/lesson-core.js
+var LESSON_TOPIC_PREFIX = "agentchess-lesson-v1-";
+var ARROW_COLORS = ["green", "red", "blue", "yellow"];
+var MAX_SLIDES = 80;
+var SQ = /^[a-h][1-8]$/;
+function loadFen(fen) {
+  const c = new Chess;
+  c.load(String(fen));
+  return c;
+}
+function validateLesson(input) {
+  const errors = [];
+  const warnings = [];
+  let p = input;
+  if (typeof p === "string") {
+    try {
+      p = JSON.parse(p);
+    } catch (e) {
+      return { ok: false, errors: [`Not valid JSON: ${e.message}`], warnings, lesson: null };
+    }
+  }
+  if (!p || typeof p !== "object")
+    return { ok: false, errors: ["The lesson must be a JSON object."], warnings, lesson: null };
+  let chess;
+  try {
+    chess = p.fen ? loadFen(p.fen) : new Chess;
+  } catch (e) {
+    return { ok: false, errors: [`"fen" isn't a valid position: ${e.message}`], warnings, lesson: null };
+  }
+  const startFen = chess.fen();
+  if (!Array.isArray(p.slides) || !p.slides.length)
+    errors.push('"slides" must be a non-empty list.');
+  const rawSlides = Array.isArray(p.slides) ? p.slides.slice(0, MAX_SLIDES) : [];
+  if (Array.isArray(p.slides) && p.slides.length > MAX_SLIDES)
+    warnings.push(`Only the first ${MAX_SLIDES} slides are used.`);
+  const orientation = p.orientation === "b" || p.orientation === "black" ? "b" : "w";
+  const slides = rawSlides.map((raw, i) => {
+    const where = `slides[${i}]`;
+    const s = raw && typeof raw === "object" ? raw : { text: String(raw ?? "") };
+    const out = { title: str(s.title, 120), text: str(s.text, 4000) };
+    if (s.fen) {
+      try {
+        chess = loadFen(s.fen);
+      } catch (e) {
+        errors.push(`${where}: "fen" isn't a valid position: ${e.message}`);
+      }
+    }
+    out.fenStart = chess.fen();
+    const moves = Array.isArray(s.moves) ? s.moves : s.move ? [s.move] : [];
+    out.moves = [];
+    for (const m of moves) {
+      const before = chess.fen();
+      const mv = tryMove2(chess, m);
+      if (!mv) {
+        errors.push(`${where}: move "${m}" isn't legal (${chess.turn() === "w" ? "White" : "Black"} to move, FEN ${before}).`);
+        break;
+      }
+      out.moves.push({ san: mv.san, from: mv.from, to: mv.to, color: mv.color });
+    }
+    if (s.tag != null && s.tag !== "") {
+      const k = tagKey(s.tag);
+      if (!k)
+        warnings.push(`${where}: tag "${s.tag}" isn't one of ${Object.keys(TAGS).join(", ")}, so it's ignored.`);
+      else if (!out.moves.length)
+        warnings.push(`${where}: "tag" marks the slide's last move, but the slide has no "moves".`);
+      else if (k !== "note")
+        out.tag = k;
+    }
+    out.fen = chess.fen();
+    if (s.orientation === "b" || s.orientation === "black")
+      out.orientation = "b";
+    else if (s.orientation === "w" || s.orientation === "white")
+      out.orientation = "w";
+    out.arrows = [];
+    for (const a of Array.isArray(s.arrows) ? s.arrows : s.arrows ? [s.arrows] : []) {
+      let from;
+      let to;
+      let color = "green";
+      if (a && typeof a === "object") {
+        ({ from, to } = a);
+        if (a.color)
+          color = String(a.color).toLowerCase();
+        if ((!from || !to) && a.move) {
+          const m = tryMove2(new Chess(out.fen), a.move);
+          if (m)
+            ({ from, to } = m);
+        }
+      } else if (typeof a === "string") {
+        const m = /^([a-h][1-8])-?([a-h][1-8])$/i.exec(a.trim());
+        if (m) {
+          from = m[1].toLowerCase();
+          to = m[2].toLowerCase();
+        } else {
+          const mv = tryMove2(new Chess(out.fen), a);
+          if (mv)
+            ({ from, to } = mv);
+        }
+      }
+      from = String(from || "").toLowerCase();
+      to = String(to || "").toLowerCase();
+      if (!SQ.test(from) || !SQ.test(to) || from === to) {
+        warnings.push(`${where}: arrow ${JSON.stringify(a)} isn't two squares (like "e2e4") or a legal move, so it's left out.`);
+        continue;
+      }
+      if (!ARROW_COLORS.includes(color)) {
+        warnings.push(`${where}: arrow color "${color}" isn't one of ${ARROW_COLORS.join(", ")}; using green.`);
+        color = "green";
+      }
+      out.arrows.push({ from, to, color });
+    }
+    out.highlights = [];
+    for (const h of Array.isArray(s.highlights) ? s.highlights : s.highlights ? [s.highlights] : []) {
+      const sq = String((h && typeof h === "object" ? h.square || h.sq : h) || "").toLowerCase();
+      let color = String(h && typeof h === "object" && h.color || "green").toLowerCase();
+      if (!SQ.test(sq)) {
+        warnings.push(`${where}: highlight ${JSON.stringify(h)} isn't a square like "e4", so it's left out.`);
+        continue;
+      }
+      if (!ARROW_COLORS.includes(color)) {
+        warnings.push(`${where}: highlight color "${color}" isn't one of ${ARROW_COLORS.join(", ")}; using green.`);
+        color = "green";
+      }
+      out.highlights.push({ sq, color });
+    }
+    if (s.task) {
+      const t = typeof s.task === "object" ? s.task : {};
+      const line = Array.isArray(t.line) ? t.line : t.move ? [t] : [];
+      if (!line.length)
+        errors.push(`${where}.task: "line" must be a non-empty list of moves.`);
+      else {
+        const steps = validateLine({ fen: out.fen, line, errors, warnings, label: `${where}.task.line` });
+        if (steps.length === line.length) {
+          out.task = { prompt: str(t.prompt, 1000), done: str(t.done || t.conclusion, 2000), line: steps, solverColor: chess.turn() };
+          if (!steps[steps.length - 1].solver)
+            warnings.push(`${where}.task: the line ends with the opponent's move. Usually a task ends on the player's move.`);
+          chess = new Chess(steps[steps.length - 1].fenAfter);
+        }
+      }
+    }
+    out.fenEnd = chess.fen();
+    if (!out.text && !out.title && !out.task)
+      warnings.push(`${where}: no title, text or task, so the slide only shows a board.`);
+    return out;
+  });
+  const lesson = errors.length ? null : {
+    v: PUZZLE_VERSION,
+    title: str(p.title, 120) || "Lesson",
+    author: str(p.author, 60),
+    level: str(p.level, 40),
+    primer: str(p.primer, 8000),
+    fen: startFen,
+    orientation,
+    slides,
+    conclusion: str(p.conclusion, 4000)
+  };
+  return { ok: !errors.length, errors, warnings, lesson };
+}
 
 // tools/cli.mjs
 var SITE = (() => {
@@ -3221,7 +3382,11 @@ Commands
   puzzle publish FILE        Publish a puzzle and print two links: a short one (?id=..., kept about
                              12 hours by the relay) and a permanent one (the puzzle is in the link)
   puzzle show ID             Print a published puzzle's JSON
-                             Format and examples: ${SITE}AGENTS.md#puzzles
+                             Guide for agents: ${SITE}puzzle/AGENTS.md
+  lesson check FILE          Validate a lesson JSON file and print an outline of the slides
+  lesson publish FILE        Publish a lesson: prints a short link and a permanent link
+  lesson show ID             Print a published lesson's JSON
+                             Guide for agents: ${SITE}lesson/AGENTS.md
   create --name NAME [--color w|b|random] [--time 10+5|none]
                              Open a new room and print its code and link
 
@@ -3701,10 +3866,10 @@ async function cmdAnnotate() {
     console.log(finish ? "Marked the analysis as done. Your opponent sees that you have finished." : `When you've finished, run: node agent-chess.mjs annotate ${code} --done   (your opponent sees "analyzing…" until then)`);
   }
 }
-function readPuzzleFile() {
+function readShareFile(kind, validate) {
   const file = pos[2];
   if (!file)
-    die('Usage: puzzle check|publish FILE   (FILE is puzzle JSON; "-" reads stdin)');
+    die(`Usage: ${kind} check|publish FILE   (FILE is ${kind} JSON; "-" reads stdin)`);
   let text;
   try {
     text = readFileSync(file === "-" ? 0 : file, "utf8");
@@ -3717,7 +3882,7 @@ function readPuzzleFile() {
   } catch (e) {
     die(`${file} isn't valid JSON: ${e.message}`);
   }
-  const r = validatePuzzle(json);
+  const r = validate(json);
   return { json, r };
 }
 function describePuzzle(pz) {
@@ -3735,15 +3900,44 @@ function describePuzzle(pz) {
   return lines.join(`
 `);
 }
-async function cmdPuzzle() {
+function describeLesson(ls) {
+  const tasks = ls.slides.filter((x) => x.task).length;
+  const lines = [`"${ls.title}"${ls.author ? ` by ${ls.author}` : ""}${ls.level ? ` (${ls.level})` : ""}: ${ls.slides.length} slide(s), ${tasks} task(s)${ls.primer ? ", with a primer" : ""}.`];
+  ls.slides.forEach((s, i) => {
+    const bits = [];
+    if (s.moves.length)
+      bits.push(`moves ${s.moves.map((m) => m.san).join(" ")}${s.tag ? ` ${TAGS[s.tag].symbol}` : ""}`);
+    if (s.arrows.length)
+      bits.push(`${s.arrows.length} arrow(s)`);
+    if (s.highlights.length)
+      bits.push(`${s.highlights.length} highlight(s)`);
+    lines.push(`  ${i + 1}. ${s.title || "(untitled)"}${bits.length ? ` [${bits.join(", ")}]` : ""}`);
+    if (s.task) {
+      lines.push(`     task, ${s.task.solverColor === "w" ? "White" : "Black"} to move:`);
+      describePuzzle({ title: "", line: s.task.line, solverColor: s.task.solverColor }).split(`
+`).slice(1).forEach((l) => lines.push("     " + l));
+    }
+    lines.push(`     ends at FEN ${s.fenEnd}`);
+  });
+  return lines.join(`
+`);
+}
+var SHARE_KINDS = {
+  puzzle: { validate: validatePuzzle, key: "puzzle", describe: describePuzzle, prefix: PUZZLE_TOPIC_PREFIX, path: "puzzle/" },
+  lesson: { validate: validateLesson, key: "lesson", describe: describeLesson, prefix: LESSON_TOPIC_PREFIX, path: "lesson/" }
+};
+var cmdPuzzle = () => cmdShare("puzzle");
+var cmdLesson = () => cmdShare("lesson");
+async function cmdShare(kind) {
+  const K = SHARE_KINDS[kind];
   const sub = pos[1];
   if (sub === "check" || sub === "publish") {
-    const { json, r } = readPuzzleFile();
+    const { json, r } = readShareFile(kind, K.validate);
     if (!r.ok) {
       if (JSON_OUT)
         console.log(JSON.stringify({ ok: false, errors: r.errors, warnings: r.warnings }, null, 2));
       else
-        console.error(`The puzzle has problems:
+        console.error(`The ${kind} has problems:
   ` + r.errors.join(`
   `) + (r.warnings.length ? `
 Warnings:
@@ -3751,12 +3945,13 @@ Warnings:
   `) : ""));
       process.exit(1);
     }
+    const item = r[K.key];
     if (sub === "check") {
       if (JSON_OUT)
-        console.log(JSON.stringify({ ok: true, warnings: r.warnings, puzzle: r.puzzle }, null, 2));
+        console.log(JSON.stringify({ ok: true, warnings: r.warnings, [K.key]: item }, null, 2));
       else
         console.log(`Looks good.
-` + describePuzzle(r.puzzle) + (r.warnings.length ? `
+` + K.describe(item) + (r.warnings.length ? `
 Warnings:
   ` + r.warnings.join(`
   `) : ""));
@@ -3768,17 +3963,17 @@ Warnings:
     for (let i = 0;i < parts.length; i++) {
       if (i)
         await sleep(1100);
-      const res = await fetch(`${RELAY}/${PUZZLE_TOPIC_PREFIX}${id}`, { method: "POST", body: JSON.stringify(parts[i]) }).catch((e) => ({ ok: false, status: e.message }));
+      const res = await fetch(`${RELAY}/${K.prefix}${id}`, { method: "POST", body: JSON.stringify(parts[i]) }).catch((e) => ({ ok: false, status: e.message }));
       if (!res.ok)
         die(`Relay refused part ${i + 1} of ${parts.length} (${res.status}).`);
     }
     const relayQ = RELAY !== DEFAULT_RELAY ? `&relay=${encodeURIComponent(RELAY)}` : "";
-    const shortLink = `${SITE}puzzle/?id=${id}${relayQ}`;
-    const permanent = `${SITE}puzzle/#z=${encoded}`;
+    const shortLink = `${SITE}${K.path}?id=${id}${relayQ}`;
+    const permanent = `${SITE}${K.path}#z=${encoded}`;
     if (JSON_OUT)
       console.log(JSON.stringify({ ok: true, id, link: shortLink, permanentLink: permanent, expires: "about 12 hours (relay cache)", warnings: r.warnings }, null, 2));
     else {
-      console.log(describePuzzle(r.puzzle));
+      console.log(K.describe(item));
       if (r.warnings.length)
         console.log(`Warnings:
   ` + r.warnings.join(`
@@ -3786,7 +3981,7 @@ Warnings:
       console.log(`
 Short link (works for about 12 hours):
   ${shortLink}`);
-      console.log(`Permanent link (the puzzle is inside the link):
+      console.log(`Permanent link (the ${kind} is inside the link):
   ${permanent}`);
     }
     return;
@@ -3794,10 +3989,10 @@ Short link (works for about 12 hours):
   if (sub === "show") {
     const id = String(pos[2] || "").toLowerCase().replace(/[^a-z0-9]/g, "");
     if (!id)
-      die("Usage: puzzle show ID");
+      die(`Usage: ${kind} show ID`);
     let res;
     try {
-      res = await fetch(`${RELAY}/${PUZZLE_TOPIC_PREFIX}${id}/json?poll=1&since=all`);
+      res = await fetch(`${RELAY}/${K.prefix}${id}/json?poll=1&since=all`);
     } catch (e) {
       die(`Could not reach the relay: ${e.message}`);
     }
@@ -3805,11 +4000,11 @@ Short link (works for about 12 hours):
 `).map(parseNtfyLine).filter(Boolean);
     const enc = joinParts(events);
     if (!enc)
-      die(`No puzzle "${id}" on the relay (it may have expired).`);
+      die(`No ${kind} "${id}" on the relay (it may have expired).`);
     console.log(JSON.stringify(JSON.parse(inflateRawSync(Buffer.from(fromBase64Url(enc))).toString("utf8")), null, 2));
     return;
   }
-  die("Usage: puzzle check FILE | puzzle publish FILE | puzzle show ID");
+  die(`Usage: ${kind} check FILE | ${kind} publish FILE | ${kind} show ID`);
 }
 async function cmdChat() {
   const code = needRoom();
@@ -4000,6 +4195,7 @@ var commands = {
   chat: cmdChat,
   review: cmdReview,
   puzzle: cmdPuzzle,
+  lesson: cmdLesson,
   annotate: cmdAnnotate,
   resign: () => simpleAction("resign", {}, "You resigned."),
   rematch: () => simpleAction("rematch", {}, "Rematch requested."),

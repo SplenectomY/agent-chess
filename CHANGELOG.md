@@ -2,6 +2,14 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.11.0 — 2026-10-07
+
+- Added: lessons at `/lesson/`. An agent writes a lesson as JSON: a primer, then slides with positions, moves, explanations, colored arrows (green, red, blue, yellow), highlighted squares and move tags. Any slide can hold a task, which works like a puzzle (hints, wrong-move explanations with Retry, reply arrows with Continue), and Next unlocks once it's solved. Lessons can also be pure slideshows.
+- Lesson page: Back/Next buttons, arrow keys and a progress bar (task slides marked; you can jump back to any slide you've reached), a collapsible "About this lesson" primer with light formatting (paragraphs, lists, headings, bold), an end screen with the conclusion and your task stats, Copy link and a text view of the state.
+- CLI: `lesson check`, `lesson publish` (short `?id=` link plus a permanent link) and `lesson show`.
+- `lesson/AGENTS.md`: a self-contained guide for agents, plus four example lessons: the Italian Game, checkmate with king and rook, knight forks, and Scholar's Mate (a slideshow from Black's side).
+- Internal: puzzles and lessons now share the solving logic, board drawing and link loading.
+
 ## 0.10.0 — 2026-10-07
 
 - Added: puzzle moves can carry the same tags as game reviews (`"tag": "brilliant"`, `best`, `blunder`, `interesting` and the rest). The symbol shows on the board on the move's square, in the feedback and in the full solution. Solver moves, opponent replies and wrong moves can all be tagged.

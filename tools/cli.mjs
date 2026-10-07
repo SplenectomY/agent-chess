@@ -11,6 +11,7 @@ import { Chess } from '../vendor/chess.js';
 import { DEFAULT_RELAY, topicFor, parseNtfyLine } from '../js/relay.js';
 import { TAGS, validatePuzzle, toBase64Url, fromBase64Url, splitParts, joinParts, PUZZLE_TOPIC_PREFIX, ID_ALPHABET } from '../js/puzzle-core.js';
 import { VERSION } from '../js/version.js';
+import { validateLesson, LESSON_TOPIC_PREFIX } from '../js/lesson-core.js';
 
 // --site overrides where links point (e.g. a local dev server). Read straight from argv
 // because HELP (below) uses it before the options are parsed.
@@ -50,7 +51,11 @@ Commands
   puzzle publish FILE        Publish a puzzle and print two links: a short one (?id=..., kept about
                              12 hours by the relay) and a permanent one (the puzzle is in the link)
   puzzle show ID             Print a published puzzle's JSON
-                             Format and examples: ${SITE}AGENTS.md#puzzles
+                             Guide for agents: ${SITE}puzzle/AGENTS.md
+  lesson check FILE          Validate a lesson JSON file and print an outline of the slides
+  lesson publish FILE        Publish a lesson: prints a short link and a permanent link
+  lesson show ID             Print a published lesson's JSON
+                             Guide for agents: ${SITE}lesson/AGENTS.md
   create --name NAME [--color w|b|random] [--time 10+5|none]
                              Open a new room and print its code and link
 
@@ -465,14 +470,14 @@ async function cmdAnnotate() {
 }
 
 // ---------- puzzles ----------
-function readPuzzleFile() {
+function readShareFile(kind, validate) {
   const file = pos[2];
-  if (!file) die('Usage: puzzle check|publish FILE   (FILE is puzzle JSON; "-" reads stdin)');
+  if (!file) die(`Usage: ${kind} check|publish FILE   (FILE is ${kind} JSON; "-" reads stdin)`);
   let text;
   try { text = readFileSync(file === '-' ? 0 : file, 'utf8'); } catch (e) { die(`Couldn't read ${file}: ${e.message}`); }
   let json;
   try { json = JSON.parse(text); } catch (e) { die(`${file} isn't valid JSON: ${e.message}`); }
-  const r = validatePuzzle(json);
+  const r = validate(json);
   return { json, r };
 }
 
@@ -492,18 +497,46 @@ function describePuzzle(pz) {
   return lines.join('\n');
 }
 
-async function cmdPuzzle() {
+function describeLesson(ls) {
+  const tasks = ls.slides.filter((x) => x.task).length;
+  const lines = [`"${ls.title}"${ls.author ? ` by ${ls.author}` : ''}${ls.level ? ` (${ls.level})` : ''}: ${ls.slides.length} slide(s), ${tasks} task(s)${ls.primer ? ', with a primer' : ''}.`];
+  ls.slides.forEach((s, i) => {
+    const bits = [];
+    if (s.moves.length) bits.push(`moves ${s.moves.map((m) => m.san).join(' ')}${s.tag ? ` ${TAGS[s.tag].symbol}` : ''}`);
+    if (s.arrows.length) bits.push(`${s.arrows.length} arrow(s)`);
+    if (s.highlights.length) bits.push(`${s.highlights.length} highlight(s)`);
+    lines.push(`  ${i + 1}. ${s.title || '(untitled)'}${bits.length ? ` [${bits.join(', ')}]` : ''}`);
+    if (s.task) {
+      lines.push(`     task, ${s.task.solverColor === 'w' ? 'White' : 'Black'} to move:`);
+      describePuzzle({ title: '', line: s.task.line, solverColor: s.task.solverColor }).split('\n').slice(1).forEach((l) => lines.push('     ' + l));
+    }
+    lines.push(`     ends at FEN ${s.fenEnd}`);
+  });
+  return lines.join('\n');
+}
+
+const SHARE_KINDS = {
+  puzzle: { validate: validatePuzzle, key: 'puzzle', describe: describePuzzle, prefix: PUZZLE_TOPIC_PREFIX, path: 'puzzle/' },
+  lesson: { validate: validateLesson, key: 'lesson', describe: describeLesson, prefix: LESSON_TOPIC_PREFIX, path: 'lesson/' },
+};
+
+const cmdPuzzle = () => cmdShare('puzzle');
+const cmdLesson = () => cmdShare('lesson');
+
+async function cmdShare(kind) {
+  const K = SHARE_KINDS[kind];
   const sub = pos[1];
   if (sub === 'check' || sub === 'publish') {
-    const { json, r } = readPuzzleFile();
+    const { json, r } = readShareFile(kind, K.validate);
     if (!r.ok) {
       if (JSON_OUT) console.log(JSON.stringify({ ok: false, errors: r.errors, warnings: r.warnings }, null, 2));
-      else console.error('The puzzle has problems:\n  ' + r.errors.join('\n  ') + (r.warnings.length ? '\nWarnings:\n  ' + r.warnings.join('\n  ') : ''));
+      else console.error(`The ${kind} has problems:\n  ` + r.errors.join('\n  ') + (r.warnings.length ? '\nWarnings:\n  ' + r.warnings.join('\n  ') : ''));
       process.exit(1);
     }
+    const item = r[K.key];
     if (sub === 'check') {
-      if (JSON_OUT) console.log(JSON.stringify({ ok: true, warnings: r.warnings, puzzle: r.puzzle }, null, 2));
-      else console.log('Looks good.\n' + describePuzzle(r.puzzle) + (r.warnings.length ? '\nWarnings:\n  ' + r.warnings.join('\n  ') : ''));
+      if (JSON_OUT) console.log(JSON.stringify({ ok: true, warnings: r.warnings, [K.key]: item }, null, 2));
+      else console.log('Looks good.\n' + K.describe(item) + (r.warnings.length ? '\nWarnings:\n  ' + r.warnings.join('\n  ') : ''));
       return;
     }
     const encoded = toBase64Url(deflateRawSync(Buffer.from(JSON.stringify(json))));
@@ -511,33 +544,33 @@ async function cmdPuzzle() {
     const parts = splitParts(id, encoded);
     for (let i = 0; i < parts.length; i++) {
       if (i) await sleep(1100);
-      const res = await fetch(`${RELAY}/${PUZZLE_TOPIC_PREFIX}${id}`, { method: 'POST', body: JSON.stringify(parts[i]) }).catch((e) => ({ ok: false, status: e.message }));
+      const res = await fetch(`${RELAY}/${K.prefix}${id}`, { method: 'POST', body: JSON.stringify(parts[i]) }).catch((e) => ({ ok: false, status: e.message }));
       if (!res.ok) die(`Relay refused part ${i + 1} of ${parts.length} (${res.status}).`);
     }
     const relayQ = RELAY !== DEFAULT_RELAY ? `&relay=${encodeURIComponent(RELAY)}` : '';
-    const shortLink = `${SITE}puzzle/?id=${id}${relayQ}`;
-    const permanent = `${SITE}puzzle/#z=${encoded}`;
+    const shortLink = `${SITE}${K.path}?id=${id}${relayQ}`;
+    const permanent = `${SITE}${K.path}#z=${encoded}`;
     if (JSON_OUT) console.log(JSON.stringify({ ok: true, id, link: shortLink, permanentLink: permanent, expires: 'about 12 hours (relay cache)', warnings: r.warnings }, null, 2));
     else {
-      console.log(describePuzzle(r.puzzle));
+      console.log(K.describe(item));
       if (r.warnings.length) console.log('Warnings:\n  ' + r.warnings.join('\n  '));
       console.log(`\nShort link (works for about 12 hours):\n  ${shortLink}`);
-      console.log(`Permanent link (the puzzle is inside the link):\n  ${permanent}`);
+      console.log(`Permanent link (the ${kind} is inside the link):\n  ${permanent}`);
     }
     return;
   }
   if (sub === 'show') {
     const id = String(pos[2] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (!id) die('Usage: puzzle show ID');
+    if (!id) die(`Usage: ${kind} show ID`);
     let res;
-    try { res = await fetch(`${RELAY}/${PUZZLE_TOPIC_PREFIX}${id}/json?poll=1&since=all`); } catch (e) { die(`Could not reach the relay: ${e.message}`); }
+    try { res = await fetch(`${RELAY}/${K.prefix}${id}/json?poll=1&since=all`); } catch (e) { die(`Could not reach the relay: ${e.message}`); }
     const events = (await res.text()).split('\n').map(parseNtfyLine).filter(Boolean);
     const enc = joinParts(events);
-    if (!enc) die(`No puzzle "${id}" on the relay (it may have expired).`);
+    if (!enc) die(`No ${kind} "${id}" on the relay (it may have expired).`);
     console.log(JSON.stringify(JSON.parse(inflateRawSync(Buffer.from(fromBase64Url(enc))).toString('utf8')), null, 2));
     return;
   }
-  die('Usage: puzzle check FILE | puzzle publish FILE | puzzle show ID');
+  die(`Usage: ${kind} check FILE | ${kind} publish FILE | ${kind} show ID`);
 }
 
 async function cmdChat() {
@@ -718,6 +751,7 @@ const commands = {
   chat: cmdChat,
   review: cmdReview,
   puzzle: cmdPuzzle,
+  lesson: cmdLesson,
   annotate: cmdAnnotate,
   resign: () => simpleAction('resign', {}, 'You resigned.'),
   rematch: () => simpleAction('rematch', {}, 'Rematch requested.'),

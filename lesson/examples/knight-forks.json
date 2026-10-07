@@ -1,0 +1,151 @@
+{
+  "title": "Knight forks",
+  "author": "Agent Chess",
+  "level": "Beginner to intermediate",
+  "primer": "A **fork** is one piece attacking two (or more) enemy pieces at once. Your opponent can only save one of them.\n\nKnights are the best forking pieces in chess:\n- they attack up to eight squares in every direction,\n- their attacks can't be blocked, because the knight jumps,\n- and an attacked queen or rook can't hit back at a knight.\n\nThe most powerful fork is a **royal fork**: check plus an attack on the queen or a rook. The king must move, and the other piece falls.\n\nYou'll learn to see the knight's reach, then find two forks yourself.",
+  "slides": [
+    {
+      "title": "The knight's reach",
+      "fen": "k7/8/8/8/4N3/8/8/7K w - - 0 1",
+      "text": "From e4 the knight attacks the eight green squares. Picture the shape: two squares in one direction, then one to the side.\n\nNotice the colors: the knight stands on a light square and attacks only dark squares. **A knight always attacks squares of the opposite color to its own.** So to spot a fork, look for two valuable pieces on squares of the **same color**, both one knight's jump from the same square.",
+      "highlights": [
+        "c3",
+        "c5",
+        "d2",
+        "d6",
+        "f2",
+        "f6",
+        "g3",
+        "g5"
+      ]
+    },
+    {
+      "title": "The royal fork",
+      "fen": "r3k3/2N5/8/8/8/8/8/4K3 b - - 0 1",
+      "text": "The knight on c7 checks the king **and** attacks the rook on a8. Black has to move the king, and next move the knight takes the rook.\n\nThe king and rook are both on light squares, and each is one knight's jump from c7.",
+      "arrows": [
+        {
+          "from": "c7",
+          "to": "e8",
+          "color": "red"
+        },
+        {
+          "from": "c7",
+          "to": "a8",
+          "color": "red"
+        }
+      ]
+    },
+    {
+      "title": "Your move: win the queen",
+      "fen": "q3k3/pp3ppp/8/1N6/8/8/PPP2PPP/4K3 w - - 0 1",
+      "text": "Black's king and queen are both on the back rank, on light squares. Your knight is one jump away from a square that hits them both.",
+      "task": {
+        "prompt": "Win Black's queen with a knight fork.",
+        "line": [
+          {
+            "move": "Nc7+",
+            "tag": "great",
+            "hints": [
+              "Find a square a knight's jump from both e8 and a8.",
+              "It's on the c-file."
+            ],
+            "explain": "Check to the king and an attack on the queen at the same time.",
+            "replies": [
+              {
+                "move": "Kd7"
+              },
+              {
+                "move": "Kd8"
+              },
+              {
+                "move": "Ke7"
+              },
+              {
+                "move": "Kf8"
+              }
+            ],
+            "wrong": {
+              "Nd6+": "It's check, but it doesn't attack the queen. You need a square that hits both e8 and a8.",
+              "Nxa7": "Grabbing a pawn wastes the chance. Look for a check.",
+              "*": "Look for a knight check that also attacks the queen."
+            }
+          },
+          {
+            "move": "Kd7",
+            "explain": "The king has to move. Every king move leaves the queen hanging."
+          },
+          {
+            "move": "Nxa8",
+            "tag": "best",
+            "hints": [
+              "Collect what you forked."
+            ],
+            "explain": "The queen is gone. Your knight may get trapped in the corner, but a knight for a queen is a huge trade."
+          }
+        ],
+        "done": "Every king move leaves the queen undefended, so the fork wins the queen whatever Black does."
+      }
+    },
+    {
+      "title": "Check the landing square",
+      "text": "A fork only works if your knight **survives** on the forking square, or at least if what you win is worth more than the knight.\n\nBefore you jump, ask: *Which enemy pieces or pawns attack that square?* Pawns are the most common spoilers, because they defend the squares diagonally in front of them."
+    },
+    {
+      "title": "Your move: the safe fork",
+      "fen": "2q3k1/5ppp/8/3N4/8/8/5PPP/6K1 w - - 0 1",
+      "text": "Two knight checks are possible here. Only one of them wins anything.",
+      "task": {
+        "prompt": "Win the queen. Careful: not every check is safe.",
+        "line": [
+          {
+            "move": "Ne7+",
+            "tag": "great",
+            "hints": [
+              "Black's queen is on c8 and the king on g8, both on light squares.",
+              "f6 is guarded by the g7 pawn. Is there another checking square?"
+            ],
+            "explain": "The knight checks from e7, where nothing can take it, and attacks the queen on c8.",
+            "replies": [
+              {
+                "move": "Kf8"
+              },
+              {
+                "move": "Kh8"
+              }
+            ],
+            "wrong": {
+              "Nf6+": {
+                "text": "The g7 pawn guards f6 and simply takes your knight.",
+                "tag": "blunder",
+                "replies": [
+                  "gxf6"
+                ]
+              },
+              "Nb6": "It attacks the queen, but it isn't check, so the queen just moves away.",
+              "*": "Look for a knight check that also attacks the queen on c8."
+            }
+          },
+          {
+            "move": "Kf8",
+            "explain": "The king steps aside, and it even attacks your knight, but it's too late."
+          },
+          {
+            "move": "Nxc8",
+            "tag": "best",
+            "hints": [
+              "Take the queen."
+            ],
+            "explain": "Queen won."
+          }
+        ],
+        "done": "The fork works because **e7 is safe**: no black piece or pawn attacks it."
+      }
+    },
+    {
+      "title": "Your fork checklist",
+      "text": "When you look for tactics, run through this:\n\n- **Targets**: where are the enemy king, queen and rooks? Any two on the same color?\n- **Square**: is there a square a knight's jump from both?\n- **Path**: can your knight reach it in one move (or two, with tempo)?\n- **Safety**: is the landing square attacked? If so, is the trade still good for you?"
+    }
+  ],
+  "conclusion": "Knights fork because they attack in every direction and can't be blocked.\n\n- Look for valuable pieces on **squares of the same color**.\n- **Royal forks** (with check) are the strongest: the king must move first.\n- Always check that the **landing square** is safe.\n\nNow watch for forks in your own games, for you and against you."
+}

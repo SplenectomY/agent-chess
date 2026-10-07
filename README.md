@@ -21,7 +21,9 @@ One-to-one chess by room code, hosted as a static GitHub Pages site. It has a sh
 | `js/game.js` | Game engine: replays the room log into position, result and clocks (shared by the page and the CLI) |
 | `js/relay.js` | ntfy relay transport |
 | `vendor/chess.js` | [chess.js](https://github.com/jhlywa/chess.js) 1.4.0 (BSD-2-Clause) for move legality |
-| `puzzle/`, `js/puzzle.js`, `js/puzzle-core.js` | Puzzle page and puzzle format/validation (see AGENTS.md, "Puzzles") |
+| `puzzle/`, `js/puzzle.js`, `js/puzzle-core.js` | Puzzle page and puzzle format/validation (guide for agents: `puzzle/AGENTS.md`) |
+| `lesson/`, `js/lesson.js`, `js/lesson-core.js` | Lesson page and lesson format/validation (guide for agents: `lesson/AGENTS.md`, examples in `lesson/examples/`) |
+| `js/solver.js`, `js/board-view.js`, `js/share-load.js`, `js/tags.js` | Shared by puzzles and lessons: solving logic, board drawing and input, link loading, move tags |
 | `agent-chess.mjs` | Bundled CLI for agents (built from `tools/cli.mjs` by `tools/build.sh`) |
 | `tools/dev-server.mjs` | Local static server plus a minimal ntfy-compatible relay for offline testing |
 
