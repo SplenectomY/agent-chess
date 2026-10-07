@@ -3,6 +3,8 @@ import * as G from './game.js';
 import { Relay, DEFAULT_RELAY, topicFor } from './relay.js';
 import { VERSION } from './version.js';
 import { SOFT_SVG, PIECE_SETS, BOARD_THEMES } from './pieces.js';
+import { loadOpenings, identify, ecoVolume } from './openings.js';
+import { primerFor } from './opening-primers.js';
 
 const APP_TITLE = `Agent Chess v${VERSION}`;
 
@@ -264,6 +266,8 @@ const R = {
   lastMoveCount: 0,
   renderQueued: false,
   review: null, // { game, ply } while stepping through a finished game
+  opening: null, // { ply } while the opening panel is open (ply within the named line)
+  openingInfo: null, // result of identify() for the current game
 };
 
 const seat = () => G.seatOf(R.s, R.me && R.me.id);
@@ -297,6 +301,7 @@ async function enterRoom(code, { create = null } = {}) {
   document.title = `Room ${code} — ${APP_TITLE}`;
   wireRoomControls();
   renderAgentHelp();
+  loadOpenings(`data/openings.json?v=${VERSION}`).then(() => { if (R.loaded) render(); });
 
   R.relay = new Relay({
     base: RELAY,
@@ -390,7 +395,9 @@ function render() {
   renderSeatPanel();
   renderInvite();
   renderSheet();
+  renderOpeningChip();
   renderReview();
+  renderOpening();
   renderFeed();
   renderTextState();
   tick();
@@ -1153,9 +1160,108 @@ function renderFeed() {
   feed.scrollTop = feed.scrollHeight;
 }
 
+// ---------- opening names ----------
+function renderOpeningChip() {
+  const s = R.s;
+  const rec = R.review ? reviewRecord() : { moves: s.moves };
+  R.openingInfo = identify(rec.moves);
+  const chip = $('opening-chip');
+  if (!R.openingInfo) {
+    chip.hidden = true;
+    if (R.opening) { R.opening = null; $('opening-panel').hidden = true; }
+    return;
+  }
+  chip.hidden = false;
+  chip.replaceChildren(el('span', { class: 'eco', text: R.openingInfo.eco }), el('span', { class: 'oname', text: R.openingInfo.name }), el('span', { class: 'more', 'aria-hidden': 'true', text: '›' }));
+  chip.title = `${R.openingInfo.eco} ${R.openingInfo.name}: show the opening line and a short primer`;
+}
+
+function openOpening() {
+  if (!R.openingInfo) return;
+  R.opening = { ply: R.openingInfo.line.length };
+  renderOpening();
+}
+
+function stepOpening(to) {
+  if (!R.opening || !R.openingInfo) return;
+  R.opening.ply = Math.max(0, Math.min(to, R.openingInfo.line.length));
+  renderOpening();
+}
+
+function miniBoard(fen, last, flip) {
+  const c = new Chess(fen);
+  const files = 'abcdefgh';
+  const squares = [];
+  for (let r = 0; r < 8; r++) {
+    for (let f = 0; f < 8; f++) {
+      const file = flip ? 7 - f : f;
+      const rank = flip ? r + 1 : 8 - r;
+      const sq = files[file] + rank;
+      const piece = c.get(sq);
+      const node = el('div', { class: ['sq', (file + rank) % 2 === 1 && 'dark', last && (last.from === sq || last.to === sq) && 'last'].filter(Boolean).join(' ') });
+      if (piece) node.append(pieceNode(piece.color, piece.type));
+      squares.push(node);
+    }
+  }
+  return el('div', { class: 'mini-board', role: 'img', 'aria-label': `Board after the shown move. FEN ${fen}` }, ...squares);
+}
+
+function renderOpening() {
+  const panel = $('opening-panel');
+  const info = R.openingInfo;
+  if (!R.opening || !info) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  const ply = R.opening.ply;
+  const line = info.line;
+  // Replay the line up to the shown ply.
+  const c = new Chess();
+  let last = null;
+  for (let i = 0; i < ply; i++) last = c.move(line[i]);
+  const primer = primerFor(info.name);
+  const fam = primer && primer.family;
+  const close = () => { R.opening = null; renderOpening(); };
+  const mini = (label, text, to, disabled) =>
+    el('button', { class: 'mini', type: 'button', 'aria-label': label, title: label, text, disabled, onclick: () => stepOpening(to) });
+
+  const moveItems = line.map((san, i) => {
+    const label = i % 2 === 0 ? `${i / 2 + 1}. ${san}` : san;
+    return el('button', { class: 'op-move' + (i + 1 === ply ? ' current' : ''), type: 'button', text: label, onclick: () => stepOpening(i + 1) });
+  });
+  const played = R.review ? reviewRecord().moves.length : R.s.moves.length;
+  const followed = info.ply;
+  const where = followed >= played
+    ? 'Your game is still in this line.'
+    : `Your game reached this position after ${G.moveLabel(followed, (R.review ? reviewRecord() : R.s).moves[followed - 1].san)} and then left the named lines.`;
+
+  panel.replaceChildren(
+    el('div', { class: 'op-top' },
+      el('div', { class: 'op-title' }, el('span', { class: 'eco', text: info.eco }), el('h2', { text: info.name })),
+      el('div', { class: 'rv-mininav op-nav' },
+        mini('Start position', '⏮', 0, ply === 0),
+        mini('Previous move', '◀', ply - 1, ply === 0),
+        mini('Next move', '▶', ply + 1, ply >= line.length),
+        mini('End of line', '⏭', line.length, ply >= line.length))),
+    miniBoard(c.fen(), last, flipped()),
+    el('div', { class: 'op-line', 'aria-label': 'Opening moves' }, ...moveItems),
+    el('p', { class: 'op-where', text: where }),
+    fam ? el('div', { class: 'op-primer' },
+      el('p', { text: fam.about }),
+      el('h3', { text: 'Ideas for White' }), el('p', { text: fam.white }),
+      el('h3', { text: 'Ideas for Black' }), el('p', { text: fam.black })) : el('p', { class: 'op-primer', text: ecoVolume(info.eco) }),
+    ...(primer ? primer.notes.map((n) => el('div', { class: 'op-note' }, el('h3', { text: n.match.split(':').pop().trim() }), el('p', { text: n.text }))) : []),
+    el('p', { class: 'op-credit' }, 'Names and lines: ', el('a', { href: 'https://github.com/lichess-org/chess-openings', target: '_blank', rel: 'noopener', text: 'Lichess openings (public domain)' }), '.'),
+    el('button', { class: 'btn op-close', type: 'button', text: 'Close', onclick: close }),
+  );
+}
+
 function renderTextState() {
   const s = R.s;
   let text = G.describeState(s, { me: R.me && R.me.id, now: serverNow() });
+  const op = identify(s.moves);
+  if (op) text = text.replace(/\nFEN:/, `\nOpening: ${op.eco} ${op.name}\nFEN:`);
   if (canMove()) {
     const legal = s.chess.moves();
     text += `\n\nYour legal moves: ${legal.join(' ')}`;
@@ -1196,12 +1302,19 @@ function wireRoomControls() {
     if (await publish({ type: 'chat', id, name: R.me.name || store.get('agentchess:name') || 'Spectator', text })) input.value = '';
   });
   $('copy-pgn').addEventListener('click', () => copy(G.toPgn(R.s), 'PGN copied'));
+  $('opening-chip').addEventListener('click', () => (R.opening ? (R.opening = null, renderOpening()) : openOpening()));
   $('copy-fen').addEventListener('click', () => copy(R.s.chess.fen(), 'FEN copied'));
   $('missing-retry').addEventListener('click', async () => {
     await R.relay.catchUp();
     render();
   });
   document.addEventListener('keydown', (e) => {
+    if (R.opening && !R.review && !e.target.closest('input, textarea, select, .board')) {
+      if (e.key === 'ArrowLeft') { e.preventDefault(); stepOpening(R.opening.ply - 1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); stepOpening(R.opening.ply + 1); }
+      else if (e.key === 'Escape') { R.opening = null; renderOpening(); }
+      return;
+    }
     if (!R.review || e.target.closest('input, textarea, select, .board')) return;
     const steps = { ArrowLeft: -1, ArrowRight: 1 };
     if (e.key in steps) {
