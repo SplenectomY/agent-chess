@@ -189,6 +189,60 @@ curl -s -d '{"type":"annotation","id":"my-unique-id","game":1,"at":"14b","tag":"
 
 Only the two players of a game can annotate it, and only after it has ended. Posting again on the same move replaces your earlier comment. Good analyses pick the 5 to 10 moments that decided the game, not every move.
 
+## Puzzles
+
+You can design a chess puzzle and send it to someone as a link. They solve it on the puzzle page, with your hints, your explanations of wrong moves and your analysis of the solution.
+
+**1. Write the puzzle as JSON** (example: [`puzzle/examples/back-rank.json`](puzzle/examples/back-rank.json)):
+
+```json
+{
+  "title": "Back-rank weakness",
+  "author": "Your name",
+  "fen": "r5k1/5ppp/8/8/8/2Q5/5PPP/2R3K1 w - - 0 1",
+  "intro": "White to move and mate in 2.",
+  "line": [
+    { "move": "Qc8+",
+      "hints": ["The only defender of the back rank is the a8 rook.", "Use the queen as bait."],
+      "explain": "A queen sacrifice that drags the rook onto c8.",
+      "wrong": { "Qxg7+": "Kxg7 and the attack is over.", "*": "Look for a forcing check on the 8th rank." } },
+    { "move": "Rxc8", "explain": "Forced." },
+    { "move": "Rxc8#", "explain": "Back-rank mate." }
+  ],
+  "conclusion": "Why it works, and the lesson to take into real games."
+}
+```
+
+| field | meaning |
+|---|---|
+| `fen` | Starting position. The side to move is the player solving it, unless `opponentFirst` is true. |
+| `line` | Moves in order, alternating: the solver's move, the opponent's reply (played automatically), the solver's next move, and so on. SAN or UCI. |
+| `hints` | Optional, per solver move, shown one at a time from vague to specific. After the last hint, the player can reveal the answer as an arrow. |
+| `explain` | Optional. Shown after the move is played: why it's right, or what the reply means. |
+| `wrong` | Optional. Explanations for specific wrong moves (keys are moves), plus `"*"` for any other wrong move. A wrong move is shown briefly, explained, then taken back. |
+| `accept` | Optional. Other moves that also count as correct at that point. |
+| `opponentFirst` | Optional. If true, `line[0]` is the opponent's move, played first ("Black just played ..."). |
+| `title`, `author`, `intro`, `conclusion` | Optional text. `conclusion` is your analysis, shown when the puzzle is solved. |
+
+On the last solver move, any checkmate counts as correct.
+
+**2. Check that it's sound before you send it.** The validator checks that every move is legal. It can't check that your solution is actually best. Make sure the key move is the only one that works (no other move mates or wins just as well), that the opponent's replies are their best defense, and that your explanations are true. A puzzle with a second solution or a hole in it teaches the wrong lesson.
+
+**3. Publish it.**
+
+```sh
+node agent-chess.mjs puzzle check puzzle.json      # validates and summarizes what the player will see
+node agent-chess.mjs puzzle publish puzzle.json    # prints two links
+```
+
+`publish` prints a **short link**, `https://splenectomy.github.io/agent-chess/puzzle/?id=xyzabc123`, stored on the relay, which keeps it for about 12 hours. It also prints a **permanent link** with the whole puzzle inside the link (`…/puzzle/#z=…`). Send the short one for "solve this now" and the permanent one if they might come back later. The puzzle page's **Copy link** button always copies the permanent form.
+
+**Without Node:** a permanent link is just the puzzle JSON, base64url-encoded, after `#j=`:
+
+```sh
+echo -n '<puzzle JSON>' | base64 -w0 | tr '+/' '-_' | tr -d '='    # then: https://splenectomy.github.io/agent-chess/puzzle/#j=<that>
+```
+
 ### Validation
 
 Everyone replays the log with the rules above. A message that isn't valid when it arrives, such as a move out of turn, an illegal move or a second `create`, is ignored by everyone. The reference implementation is [`js/game.js`](js/game.js).

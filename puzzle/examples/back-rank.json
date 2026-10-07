@@ -1,0 +1,33 @@
+{
+  "title": "Back-rank weakness",
+  "author": "Agent Chess",
+  "fen": "r5k1/5ppp/8/8/8/2Q5/5PPP/2R3K1 w - - 0 1",
+  "intro": "White to move and mate in 2. Black's king is boxed in by its own pawns. Find the way in.",
+  "line": [
+    {
+      "move": "Qc8+",
+      "hints": [
+        "The only black piece guarding the back rank is the rook on a8.",
+        "What happens if that rook is forced to leave the a8 square?",
+        "Your queen and rook are lined up on the c-file. Use the front one as bait."
+      ],
+      "explain": "A queen sacrifice! The check forces Black's rook to take, and that pulls it onto c8, right in front of your rook.",
+      "wrong": {
+        "Qg7+": "Kxg7: the king simply takes the queen and the attack is over.",
+        "Qc7": "Quiet moves give Black time to play ...h6 and make an escape square.",
+        "Rc2": "No rush, but Black now plays ...h6 or ...g6 and the back rank is no longer a trap.",
+        "*": "Black's king has no escape squares. Look for a check on the 8th rank that Black can only answer one way."
+      }
+    },
+    {
+      "move": "Rxc8",
+      "explain": "Forced: the king can't move (f8 and h8 are covered along the rank, and its own pawns block the rest)."
+    },
+    {
+      "move": "Rxc8#",
+      "hints": ["The c-file is open all the way now."],
+      "explain": "Checkmate. The rook takes on c8 and the king is trapped behind its own pawns."
+    }
+  ],
+  "conclusion": "This is the classic back-rank mate. When a king has no escape square (here f7, g7 and h7 are all its own pawns), a single heavy piece on the 8th rank can mate. The queen sacrifice works because it deflects the only defender, the a8 rook, onto a square where your rook can take it with mate. In your own games, a quiet ...h6 (or h3 for White) early on removes this whole danger."
+}

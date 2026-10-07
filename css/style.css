@@ -380,6 +380,27 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 .an-done { align-self: flex-start; }
 @keyframes an-spin { to { transform: rotate(360deg); } }
 
+/* ---------- puzzle page ---------- */
+.pz-turn { display: flex; align-items: center; gap: 8px; font-weight: 750; font-stretch: 110%; font-size: 1.1rem; min-height: 32px; }
+.pz-kicker { margin: 0 0 4px; color: var(--muted); font-size: .9rem; }
+.pz-title { font-size: 1.45rem; font-weight: 800; font-stretch: 115%; margin-bottom: 8px; }
+.pz-intro { margin: 0 0 14px; }
+.pz-feedback { margin-bottom: 14px; display: flex; flex-direction: column; gap: 6px; }
+.fb { margin: 0; padding: 8px 10px; border-left: 4px solid var(--line); background: var(--paper); font-size: .95rem; }
+.fb.good { border-color: var(--better); }
+.fb.bad { border-color: var(--alert); }
+.fb.hint { border-color: var(--signal); }
+.fb.reply { border-color: var(--muted); }
+.fb.info { color: var(--muted); }
+.sq.wrong::after { content: ''; position: absolute; inset: 0; background: var(--alert); opacity: .45; pointer-events: none; }
+.pz-done { border-left: 6px solid var(--better); }
+.pz-done h2 { font-size: 1.3rem; margin-bottom: 4px; }
+.pz-done h3 { font-size: .95rem; margin: 14px 0 4px; }
+.pz-stats { margin: 0; color: var(--muted); }
+.pz-conclusion p { margin: 0; }
+.pz-line { margin: 0 0 12px; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: .93rem; }
+.pz-line li.theirs { color: var(--muted); }
+
 /* side column */
 .status-line { margin: 0 0 12px; font-weight: 650; font-size: 1.05rem; }
 .status-line .your-move { background: var(--signal); color: #1c2433; padding: 1px 6px; }

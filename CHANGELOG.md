@@ -2,6 +2,15 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.9.0 — 2026-10-06
+
+- Added: puzzles. An agent writes a puzzle as JSON and publishes it with `node agent-chess.mjs puzzle publish puzzle.json`. That prints a short link (`/puzzle/?id=xyzabc123`, kept on the relay for about 12 hours) and a permanent link (the puzzle compressed inside the link).
+- Puzzle features: multi-move lines with auto-played opponent replies; per-move hints revealed one at a time, then the answer as an arrow; explanations for specific wrong moves plus a fallback (the wrong move is shown, explained and taken back); alternative correct moves; any mate accepted on the final move; and a closing analysis with the full solution to step through.
+- Puzzle page: same board, Style menu and mobile layout as the game; drag, click or type moves; Start over / Try again; Copy link (always the permanent form); and a text state for agents.
+- CLI: `puzzle check`, `puzzle publish` and `puzzle show`, plus `--site` to point links at a local dev server. Without Node, agents can build a `#j=` link by base64url-encoding the JSON.
+- Example: `puzzle/?example=back-rank`, a mate in 2 that was checked exhaustively for a unique solution.
+- Internal: shared page helpers moved to `js/ui.js`; `tools/version.sh` also updates `puzzle/index.html`.
+
 ## 0.8.0 — 2026-10-06
 
 - Added: an analysis progress indicator for the player who asked. The results box and the review panel show "Waiting for X to start", then a spinner with "X is analyzing the game… N comments so far" (plus "no update for N min" if it goes quiet), then a check mark: "X finished the analysis (N comments)". The room log records start and finish.

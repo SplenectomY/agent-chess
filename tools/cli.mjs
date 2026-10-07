@@ -5,12 +5,19 @@ import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
+import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import * as G from '../js/game.js';
 import { Chess } from '../vendor/chess.js';
 import { DEFAULT_RELAY, topicFor, parseNtfyLine } from '../js/relay.js';
+import { validatePuzzle, toBase64Url, fromBase64Url, splitParts, joinParts, PUZZLE_TOPIC_PREFIX, ID_ALPHABET } from '../js/puzzle-core.js';
 import { VERSION } from '../js/version.js';
 
-const SITE = 'https://splenectomy.github.io/agent-chess/';
+// --site overrides where links point (e.g. a local dev server). Read straight from argv
+// because HELP (below) uses it before the options are parsed.
+const SITE = (() => {
+  const i = process.argv.indexOf('--site');
+  return String(i > 0 && process.argv[i + 1] ? process.argv[i + 1] : 'https://splenectomy.github.io/agent-chess/').replace(/\/?$/, '/');
+})();
 const HELP = `Agent Chess CLI v${VERSION} — play a room from the command line.
 
 Usage: node agent-chess.mjs <command> [ROOM] [args] [options]
@@ -39,6 +46,11 @@ Commands
   annotate ROOM --done       Tell your opponent the analysis is finished (stops their "analyzing…" indicator)
   annotate ROOM --file notes.json
                              Post many comments: [{"at":"14b","tag":"mistake","text":"...","better":"Nd7"}, ...]
+  puzzle check FILE          Validate a puzzle JSON file and print what the player will see
+  puzzle publish FILE        Publish a puzzle and print two links: a short one (?id=..., kept about
+                             12 hours by the relay) and a permanent one (the puzzle is in the link)
+  puzzle show ID             Print a published puzzle's JSON
+                             Format and examples: ${SITE}AGENTS.md#puzzles
   create --name NAME [--color w|b|random] [--time 10+5|none]
                              Open a new room and print its code and link
 
@@ -452,6 +464,77 @@ async function cmdAnnotate() {
   }
 }
 
+// ---------- puzzles ----------
+function readPuzzleFile() {
+  const file = pos[2];
+  if (!file) die('Usage: puzzle check|publish FILE   (FILE is puzzle JSON; "-" reads stdin)');
+  let text;
+  try { text = readFileSync(file === '-' ? 0 : file, 'utf8'); } catch (e) { die(`Couldn't read ${file}: ${e.message}`); }
+  let json;
+  try { json = JSON.parse(text); } catch (e) { die(`${file} isn't valid JSON: ${e.message}`); }
+  const r = validatePuzzle(json);
+  return { json, r };
+}
+
+function describePuzzle(pz) {
+  const lines = [`"${pz.title}"${pz.author ? ` by ${pz.author}` : ''}: ${pz.solverColor === 'w' ? 'White' : 'Black'} to solve, ${pz.line.filter((x) => x.solver).length} move(s) to find.`];
+  pz.line.forEach((st, i) => {
+    const extra = st.solver
+      ? ` [${(st.hints || []).length} hint(s)${st.wrong ? `, explains ${Object.keys(st.wrong).filter((k) => k !== '*').join(' ') || 'other moves'}${st.wrong['*'] ? ' + fallback' : ''}` : ''}${st.accept ? `, also accepts ${st.accept.join(' ')}` : ''}${st.anyMate ? ', any mate accepted' : ''}]`
+      : ' (auto-played)';
+    lines.push(`  ${i + 1}. ${st.solver ? 'solver' : 'opponent'}: ${st.move}${extra}`);
+  });
+  return lines.join('\n');
+}
+
+async function cmdPuzzle() {
+  const sub = pos[1];
+  if (sub === 'check' || sub === 'publish') {
+    const { json, r } = readPuzzleFile();
+    if (!r.ok) {
+      if (JSON_OUT) console.log(JSON.stringify({ ok: false, errors: r.errors, warnings: r.warnings }, null, 2));
+      else console.error('The puzzle has problems:\n  ' + r.errors.join('\n  ') + (r.warnings.length ? '\nWarnings:\n  ' + r.warnings.join('\n  ') : ''));
+      process.exit(1);
+    }
+    if (sub === 'check') {
+      if (JSON_OUT) console.log(JSON.stringify({ ok: true, warnings: r.warnings, puzzle: r.puzzle }, null, 2));
+      else console.log('Looks good.\n' + describePuzzle(r.puzzle) + (r.warnings.length ? '\nWarnings:\n  ' + r.warnings.join('\n  ') : ''));
+      return;
+    }
+    const encoded = toBase64Url(deflateRawSync(Buffer.from(JSON.stringify(json))));
+    const id = Array.from(randomBytes(9), (b) => ID_ALPHABET[b % ID_ALPHABET.length]).join('');
+    const parts = splitParts(id, encoded);
+    for (let i = 0; i < parts.length; i++) {
+      if (i) await sleep(1100);
+      const res = await fetch(`${RELAY}/${PUZZLE_TOPIC_PREFIX}${id}`, { method: 'POST', body: JSON.stringify(parts[i]) }).catch((e) => ({ ok: false, status: e.message }));
+      if (!res.ok) die(`Relay refused part ${i + 1} of ${parts.length} (${res.status}).`);
+    }
+    const relayQ = RELAY !== DEFAULT_RELAY ? `&relay=${encodeURIComponent(RELAY)}` : '';
+    const shortLink = `${SITE}puzzle/?id=${id}${relayQ}`;
+    const permanent = `${SITE}puzzle/#z=${encoded}`;
+    if (JSON_OUT) console.log(JSON.stringify({ ok: true, id, link: shortLink, permanentLink: permanent, expires: 'about 12 hours (relay cache)', warnings: r.warnings }, null, 2));
+    else {
+      console.log(describePuzzle(r.puzzle));
+      if (r.warnings.length) console.log('Warnings:\n  ' + r.warnings.join('\n  '));
+      console.log(`\nShort link (works for about 12 hours):\n  ${shortLink}`);
+      console.log(`Permanent link (the puzzle is inside the link):\n  ${permanent}`);
+    }
+    return;
+  }
+  if (sub === 'show') {
+    const id = String(pos[2] || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (!id) die('Usage: puzzle show ID');
+    let res;
+    try { res = await fetch(`${RELAY}/${PUZZLE_TOPIC_PREFIX}${id}/json?poll=1&since=all`); } catch (e) { die(`Could not reach the relay: ${e.message}`); }
+    const events = (await res.text()).split('\n').map(parseNtfyLine).filter(Boolean);
+    const enc = joinParts(events);
+    if (!enc) die(`No puzzle "${id}" on the relay (it may have expired).`);
+    console.log(JSON.stringify(JSON.parse(inflateRawSync(Buffer.from(fromBase64Url(enc))).toString('utf8')), null, 2));
+    return;
+  }
+  die('Usage: puzzle check FILE | puzzle publish FILE | puzzle show ID');
+}
+
 async function cmdChat() {
   const code = needRoom();
   const text = pos.slice(2).join(' ');
@@ -629,6 +712,7 @@ const commands = {
   create: cmdCreate,
   chat: cmdChat,
   review: cmdReview,
+  puzzle: cmdPuzzle,
   annotate: cmdAnnotate,
   resign: () => simpleAction('resign', {}, 'You resigned.'),
   rematch: () => simpleAction('rematch', {}, 'Rematch requested.'),

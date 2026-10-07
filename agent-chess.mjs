@@ -5,6 +5,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { readFileSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
 import { randomBytes } from "node:crypto";
+import { deflateRawSync, inflateRawSync } from "node:zlib";
 
 // vendor/chess.js
 /*! chess.js v1.4.0 | (c) 2025 Jeff Hlywa | BSD-2-Clause | https://github.com/jhlywa/chess.js — bundled without the PGN parser */
@@ -2946,11 +2947,173 @@ function parseNtfyMessage(msg) {
   return { id: msg.id, time: msg.time * 1000, data };
 }
 
+// js/puzzle-core.js
+var PUZZLE_VERSION = 1;
+var PUZZLE_TOPIC_PREFIX = "agentchess-puzzle-v1-";
+var ID_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789";
+var TEXT_MAX = 2000;
+var str = (v, max = TEXT_MAX) => typeof v === "string" ? v.trim().slice(0, max) : "";
+function tryMove2(chess, text) {
+  if (typeof text !== "string" || !text.trim())
+    return null;
+  const t = text.trim();
+  try {
+    const m = /^([a-h][1-8])([a-h][1-8])([qrbn])?$/i.exec(t);
+    if (m)
+      return chess.move({ from: m[1].toLowerCase(), to: m[2].toLowerCase(), promotion: m[3] ? m[3].toLowerCase() : undefined });
+    return chess.move(t.replace(/0/g, "O"));
+  } catch {
+    return null;
+  }
+}
+function validatePuzzle(input) {
+  const errors = [];
+  const warnings = [];
+  let p = input;
+  if (typeof p === "string") {
+    try {
+      p = JSON.parse(p);
+    } catch (e) {
+      return { ok: false, errors: [`Not valid JSON: ${e.message}`], warnings, puzzle: null };
+    }
+  }
+  if (!p || typeof p !== "object")
+    return { ok: false, errors: ["The puzzle must be a JSON object."], warnings, puzzle: null };
+  const chess = new Chess;
+  try {
+    chess.load(String(p.fen || ""));
+  } catch (e) {
+    return { ok: false, errors: [`"fen" isn't a valid position: ${e.message}`], warnings, puzzle: null };
+  }
+  if (!Array.isArray(p.line) || !p.line.length)
+    errors.push('"line" must be a non-empty list of moves.');
+  const opponentFirst = !!p.opponentFirst;
+  const solverColor = opponentFirst ? chess.turn() === "w" ? "b" : "w" : chess.turn();
+  const steps = [];
+  const lastSolverIdx = (() => {
+    let idx = -1;
+    (p.line || []).forEach((_, i) => {
+      if (i % 2 === 0 !== opponentFirst)
+        idx = i;
+    });
+    return idx;
+  })();
+  (p.line || []).forEach((raw, i) => {
+    const step = typeof raw === "string" ? { move: raw } : raw || {};
+    const solver = i % 2 === 0 !== opponentFirst;
+    const where = `line[${i}] (${solver ? "your move" : "opponent's reply"})`;
+    const fenBefore = chess.fen();
+    const check = (text) => tryMove2(new Chess(fenBefore), text);
+    const mv = tryMove2(chess, step.move);
+    if (!mv) {
+      errors.push(`${where}: "${step.move}" isn't a legal move here (${chess.turn() === "w" ? "White" : "Black"} to move, FEN ${fenBefore}).`);
+      return;
+    }
+    const out = { move: mv.san, uci: mv.from + mv.to + (mv.promotion || ""), from: mv.from, to: mv.to, solver, fenBefore, fenAfter: chess.fen() };
+    if (step.explain)
+      out.explain = str(step.explain);
+    if (solver) {
+      const accept = [];
+      for (const a of Array.isArray(step.accept) ? step.accept : []) {
+        const m = check(a);
+        if (!m)
+          warnings.push(`${where}: accepted move "${a}" isn't legal there, so it's ignored.`);
+        else if (m.san !== mv.san)
+          accept.push(m.san);
+      }
+      if (accept.length)
+        out.accept = accept;
+      const hints = (Array.isArray(step.hints) ? step.hints : step.hint ? [step.hint] : []).map((h) => str(h)).filter(Boolean);
+      if (hints.length)
+        out.hints = hints;
+      if (step.wrong && typeof step.wrong === "object") {
+        const wrong = {};
+        for (const [k, v] of Object.entries(step.wrong)) {
+          if (k === "*") {
+            wrong["*"] = str(v);
+            continue;
+          }
+          const m = check(k);
+          if (!m)
+            warnings.push(`${where}: wrong-move key "${k}" isn't legal there, so its explanation is never shown.`);
+          else if (m.san === mv.san || accept.includes(m.san))
+            warnings.push(`${where}: "${k}" is listed as wrong but it's the correct move.`);
+          else
+            wrong[m.san] = str(v);
+        }
+        if (Object.keys(wrong).length)
+          out.wrong = wrong;
+      }
+      if (i === lastSolverIdx)
+        out.anyMate = true;
+      if (!out.hints)
+        warnings.push(`${where}: no hints. Players who get stuck can only reveal the answer.`);
+    }
+    steps.push(out);
+  });
+  if (steps.length && !errors.length) {
+    const last = steps[steps.length - 1];
+    if (!last.solver)
+      warnings.push("The line ends with the opponent's move. Usually a puzzle ends on the solver's move.");
+  }
+  const puzzle = errors.length ? null : {
+    v: PUZZLE_VERSION,
+    title: str(p.title, 120) || "Puzzle",
+    author: str(p.author, 60),
+    fen: new Chess(String(p.fen)).fen(),
+    intro: str(p.intro),
+    opponentFirst,
+    solverColor,
+    line: steps,
+    conclusion: str(p.conclusion, 4000)
+  };
+  return { ok: !errors.length, errors, warnings, puzzle };
+}
+function toBase64Url(bytes) {
+  let s = "";
+  for (const b of bytes)
+    s += String.fromCharCode(b);
+  const b64 = typeof btoa === "function" ? btoa(s) : Buffer.from(bytes).toString("base64");
+  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function fromBase64Url(text) {
+  const b64 = text.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - text.length % 4) % 4);
+  if (typeof atob === "function")
+    return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  return new Uint8Array(Buffer.from(b64, "base64"));
+}
+var CHUNK = 3000;
+function splitParts(pid, encoded) {
+  const parts = [];
+  for (let i = 0;i < encoded.length; i += CHUNK)
+    parts.push(encoded.slice(i, i + CHUNK));
+  return parts.map((data, n) => ({ type: "puzzle-part", v: PUZZLE_VERSION, pid, n, of: parts.length, data }));
+}
+function joinParts(events) {
+  const byPid = new Map;
+  for (const ev of events) {
+    const d = ev && ev.data;
+    if (!d || d.type !== "puzzle-part" || typeof d.data !== "string" || !Number.isInteger(d.n) || !Number.isInteger(d.of))
+      continue;
+    if (!byPid.has(d.pid))
+      byPid.set(d.pid, { of: d.of, parts: new Map, order: byPid.size });
+    byPid.get(d.pid).parts.set(d.n, d.data);
+  }
+  const complete = [...byPid.values()].filter((x) => x.parts.size === x.of).sort((a, b) => b.order - a.order);
+  if (!complete.length)
+    return null;
+  const c = complete[0];
+  return Array.from({ length: c.of }, (_, i) => c.parts.get(i)).join("");
+}
+
 // js/version.js
-var VERSION = "0.8.0";
+var VERSION = "0.9.0";
 
 // tools/cli.mjs
-var SITE = "https://splenectomy.github.io/agent-chess/";
+var SITE = (() => {
+  const i = process.argv.indexOf("--site");
+  return String(i > 0 && process.argv[i + 1] ? process.argv[i + 1] : "https://splenectomy.github.io/agent-chess/").replace(/\/?$/, "/");
+})();
 var HELP = `Agent Chess CLI v${VERSION} — play a room from the command line.
 
 Usage: node agent-chess.mjs <command> [ROOM] [args] [options]
@@ -2979,6 +3142,11 @@ Commands
   annotate ROOM --done       Tell your opponent the analysis is finished (stops their "analyzing…" indicator)
   annotate ROOM --file notes.json
                              Post many comments: [{"at":"14b","tag":"mistake","text":"...","better":"Nd7"}, ...]
+  puzzle check FILE          Validate a puzzle JSON file and print what the player will see
+  puzzle publish FILE        Publish a puzzle and print two links: a short one (?id=..., kept about
+                             12 hours by the relay) and a permanent one (the puzzle is in the link)
+  puzzle show ID             Print a published puzzle's JSON
+                             Format and examples: ${SITE}AGENTS.md#puzzles
   create --name NAME [--color w|b|random] [--time 10+5|none]
                              Open a new room and print its code and link
 
@@ -3458,6 +3626,110 @@ async function cmdAnnotate() {
     console.log(finish ? "Marked the analysis as done. Your opponent sees that you have finished." : `When you've finished, run: node agent-chess.mjs annotate ${code} --done   (your opponent sees "analyzing…" until then)`);
   }
 }
+function readPuzzleFile() {
+  const file = pos[2];
+  if (!file)
+    die('Usage: puzzle check|publish FILE   (FILE is puzzle JSON; "-" reads stdin)');
+  let text;
+  try {
+    text = readFileSync(file === "-" ? 0 : file, "utf8");
+  } catch (e) {
+    die(`Couldn't read ${file}: ${e.message}`);
+  }
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch (e) {
+    die(`${file} isn't valid JSON: ${e.message}`);
+  }
+  const r = validatePuzzle(json);
+  return { json, r };
+}
+function describePuzzle(pz) {
+  const lines = [`"${pz.title}"${pz.author ? ` by ${pz.author}` : ""}: ${pz.solverColor === "w" ? "White" : "Black"} to solve, ${pz.line.filter((x) => x.solver).length} move(s) to find.`];
+  pz.line.forEach((st, i) => {
+    const extra = st.solver ? ` [${(st.hints || []).length} hint(s)${st.wrong ? `, explains ${Object.keys(st.wrong).filter((k) => k !== "*").join(" ") || "other moves"}${st.wrong["*"] ? " + fallback" : ""}` : ""}${st.accept ? `, also accepts ${st.accept.join(" ")}` : ""}${st.anyMate ? ", any mate accepted" : ""}]` : " (auto-played)";
+    lines.push(`  ${i + 1}. ${st.solver ? "solver" : "opponent"}: ${st.move}${extra}`);
+  });
+  return lines.join(`
+`);
+}
+async function cmdPuzzle() {
+  const sub = pos[1];
+  if (sub === "check" || sub === "publish") {
+    const { json, r } = readPuzzleFile();
+    if (!r.ok) {
+      if (JSON_OUT)
+        console.log(JSON.stringify({ ok: false, errors: r.errors, warnings: r.warnings }, null, 2));
+      else
+        console.error(`The puzzle has problems:
+  ` + r.errors.join(`
+  `) + (r.warnings.length ? `
+Warnings:
+  ` + r.warnings.join(`
+  `) : ""));
+      process.exit(1);
+    }
+    if (sub === "check") {
+      if (JSON_OUT)
+        console.log(JSON.stringify({ ok: true, warnings: r.warnings, puzzle: r.puzzle }, null, 2));
+      else
+        console.log(`Looks good.
+` + describePuzzle(r.puzzle) + (r.warnings.length ? `
+Warnings:
+  ` + r.warnings.join(`
+  `) : ""));
+      return;
+    }
+    const encoded = toBase64Url(deflateRawSync(Buffer.from(JSON.stringify(json))));
+    const id = Array.from(randomBytes(9), (b) => ID_ALPHABET[b % ID_ALPHABET.length]).join("");
+    const parts = splitParts(id, encoded);
+    for (let i = 0;i < parts.length; i++) {
+      if (i)
+        await sleep(1100);
+      const res = await fetch(`${RELAY}/${PUZZLE_TOPIC_PREFIX}${id}`, { method: "POST", body: JSON.stringify(parts[i]) }).catch((e) => ({ ok: false, status: e.message }));
+      if (!res.ok)
+        die(`Relay refused part ${i + 1} of ${parts.length} (${res.status}).`);
+    }
+    const relayQ = RELAY !== DEFAULT_RELAY ? `&relay=${encodeURIComponent(RELAY)}` : "";
+    const shortLink = `${SITE}puzzle/?id=${id}${relayQ}`;
+    const permanent = `${SITE}puzzle/#z=${encoded}`;
+    if (JSON_OUT)
+      console.log(JSON.stringify({ ok: true, id, link: shortLink, permanentLink: permanent, expires: "about 12 hours (relay cache)", warnings: r.warnings }, null, 2));
+    else {
+      console.log(describePuzzle(r.puzzle));
+      if (r.warnings.length)
+        console.log(`Warnings:
+  ` + r.warnings.join(`
+  `));
+      console.log(`
+Short link (works for about 12 hours):
+  ${shortLink}`);
+      console.log(`Permanent link (the puzzle is inside the link):
+  ${permanent}`);
+    }
+    return;
+  }
+  if (sub === "show") {
+    const id = String(pos[2] || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!id)
+      die("Usage: puzzle show ID");
+    let res;
+    try {
+      res = await fetch(`${RELAY}/${PUZZLE_TOPIC_PREFIX}${id}/json?poll=1&since=all`);
+    } catch (e) {
+      die(`Could not reach the relay: ${e.message}`);
+    }
+    const events = (await res.text()).split(`
+`).map(parseNtfyLine).filter(Boolean);
+    const enc = joinParts(events);
+    if (!enc)
+      die(`No puzzle "${id}" on the relay (it may have expired).`);
+    console.log(JSON.stringify(JSON.parse(inflateRawSync(Buffer.from(fromBase64Url(enc))).toString("utf8")), null, 2));
+    return;
+  }
+  die("Usage: puzzle check FILE | puzzle publish FILE | puzzle show ID");
+}
 async function cmdChat() {
   const code = needRoom();
   const text = pos.slice(2).join(" ");
@@ -3646,6 +3918,7 @@ var commands = {
   create: cmdCreate,
   chat: cmdChat,
   review: cmdReview,
+  puzzle: cmdPuzzle,
   annotate: cmdAnnotate,
   resign: () => simpleAction("resign", {}, "You resigned."),
   rematch: () => simpleAction("rematch", {}, "Rematch requested."),
