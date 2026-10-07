@@ -193,17 +193,11 @@ function play(text) {
     advance();
   } else {
     P.mistakes++;
-    // Show the wrong move for a moment, then take it back.
+    // Leave the wrong move on the board so the solver can study it; Retry takes it back.
     P.wrongChess = trial;
     P.flash = { from: mv.from, to: mv.to };
     const why = wrongMessage(step, mv.san);
-    P.feedback.push({ kind: 'bad', text: `${mv.san} isn't it.${why ? ' ' + why : ' Try again.'}` });
-    render();
-    setTimeout(() => {
-      P.wrongChess = null;
-      P.flash = null;
-      render();
-    }, 1100);
+    P.feedback.push({ kind: 'bad', text: `${mv.san} isn't it.${why ? ' ' + why : ''} Press Retry when you're ready to try again.` });
   }
   render();
 }
@@ -251,6 +245,16 @@ function hint() {
   render();
 }
 
+// Take back the wrong move that's on the board.
+function retry() {
+  if (!P.wrongChess) return;
+  P.wrongChess = null;
+  P.flash = null;
+  P.sel = null;
+  render();
+  if (canMove()) $('move-input').focus();
+}
+
 function restart() {
   Object.assign(P, {
     chess: new Chess(P.pz.fen), step: 0, mistakes: 0, hintsUsed: 0, hintLevel: {}, revealed: {}, sel: null,
@@ -268,7 +272,7 @@ function render() {
   const toMove = P.chess.turn();
   $('pz-turn').replaceChildren(
     el('span', { class: `pb-swatch ${pz.solverColor}`, 'aria-hidden': 'true' }),
-    P.solved ? 'Solved!' : P.busy ? `${COLOR[toMove]} is replying…` : `${COLOR[pz.solverColor]} to move`,
+    P.solved ? 'Solved!' : P.wrongChess ? 'Not quite. Press Retry to take it back.' : P.busy ? `${COLOR[toMove]} is replying…` : `${COLOR[pz.solverColor]} to move`,
   );
   // Feedback: the latest few messages, newest last.
   const fb = $('pz-feedback');
@@ -283,6 +287,7 @@ function render() {
     const step = pz.line[P.step];
     const hints = (step && step.hints) || [];
     const shown = P.hintLevel[P.step] || 0;
+    if (P.wrongChess) acts.push(el('button', { class: 'btn primary', type: 'button', text: 'Retry', id: 'pz-retry', onclick: retry }));
     const label = shown < hints.length ? (shown ? 'Another hint' : 'Hint') : P.revealed[P.step] ? 'Answer shown' : 'Show the answer';
     acts.push(el('button', { class: 'btn', type: 'button', text: label, disabled: !canMove() || !!P.revealed[P.step], onclick: hint }));
     acts.push(el('button', { class: 'btn', type: 'button', text: 'Start over', onclick: restart }));
@@ -327,7 +332,7 @@ function renderTextState() {
   const lines = [
     `Puzzle: ${P.pz.title}${P.pz.author ? ` by ${P.pz.author}` : ''}`,
     `You play: ${COLOR[P.pz.solverColor]}`,
-    `Status: ${P.solved ? 'solved' : canMove() ? 'your move' : 'opponent replying'}`,
+    `Status: ${P.solved ? 'solved' : P.wrongChess ? 'wrong move on the board; press Retry to take it back' : canMove() ? 'your move' : 'opponent replying'}`,
     `FEN: ${c.fen()}`,
   ];
   if (canMove()) lines.push(`Legal moves: ${c.moves().join(' ')}`);

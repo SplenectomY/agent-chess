@@ -2,6 +2,10 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.9.2 — 2026-10-07
+
+- Changed: a wrong move in a puzzle now stays on the board, highlighted, with its explanation, until you press **Retry**. It used to be taken back automatically after about a second, which was too fast to see what went wrong.
+
 ## 0.9.1 — 2026-10-06
 
 - Added: `puzzle/AGENTS.md`, a self-contained guide to give an agent when you want a puzzle. It covers designing a sound puzzle (fit the request, unique solution, verify replies, difficulty guide), the JSON format, and making the link: with Node (`puzzle publish`, short and permanent links) or with any shell (a tested Python one-liner for the permanent link). The main AGENTS.md links to it.

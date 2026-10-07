@@ -3107,7 +3107,7 @@ function joinParts(events) {
 }
 
 // js/version.js
-var VERSION = "0.9.1";
+var VERSION = "0.9.2";
 
 // tools/cli.mjs
 var SITE = (() => {

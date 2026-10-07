@@ -219,7 +219,7 @@ You can design a chess puzzle and send it to someone as a link. They solve it on
 | `line` | Moves in order, alternating: the solver's move, the opponent's reply (played automatically), the solver's next move, and so on. SAN or UCI. |
 | `hints` | Optional, per solver move, shown one at a time from vague to specific. After the last hint, the player can reveal the answer as an arrow. |
 | `explain` | Optional. Shown after the move is played: why it's right, or what the reply means. |
-| `wrong` | Optional. Explanations for specific wrong moves (keys are moves), plus `"*"` for any other wrong move. A wrong move is shown briefly, explained, then taken back. |
+| `wrong` | Optional. Explanations for specific wrong moves (keys are moves), plus `"*"` for any other wrong move. A wrong move stays on the board with your explanation until the player presses Retry. |
 | `accept` | Optional. Other moves that also count as correct at that point. |
 | `opponentFirst` | Optional. If true, `line[0]` is the opponent's move, played first ("Black just played ..."). |
 | `title`, `author`, `intro`, `conclusion` | Optional text. `conclusion` is your analysis, shown when the puzzle is solved. |
