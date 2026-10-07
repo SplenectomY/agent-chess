@@ -2,6 +2,10 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.17.1 — 2026-10-07
+
+- Fixed: a browser reporting a voice without a name could stop the puzzle, lesson and room pages from loading. The voice list is now built defensively.
+
 ## 0.17.0 — 2026-10-07
 
 - Better built-in voices: read-aloud now picks the best voice your browser has (Chrome's online "Google" voices, Edge's "Natural" voices, Apple's Premium/Enhanced voices) instead of the basic offline one, and avoids robotic eSpeak voices.

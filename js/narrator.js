@@ -332,7 +332,10 @@ export function wireVoicePicker() {
     sel.replaceChildren(
       opt('auto', t('voice.autoBest')),
       hdAvailable(code) ? opt('hd', t('voice.hd')) : opt('hd', t('voice.hdNone'), { disabled: true }),
-      ...mine.map((v) => opt(v.voiceURI || v.name, v.name.replace(/\s*\(.*?\)\s*$/, '') || v.name)),
+      ...mine.map((v) => {
+        const name = String(v.name || v.voiceURI || v.lang || '?');
+        return opt(v.voiceURI || name, name.replace(/\s*\(.*?\)\s*$/, '') || name);
+      }),
     );
     const want = voiceMode() === 'hd' && hdAvailable(code) ? 'hd' : pickedVoice(code) || 'auto';
     sel.value = [...sel.options].some((o) => o.value === want && !o.disabled) ? want : 'auto';
@@ -352,7 +355,9 @@ export function wireVoicePicker() {
     } else if (note) note.textContent = '';
     sampler.speak(t('voice.sample'), code);
   });
-  if (canSpeak()) speechSynthesis.addEventListener?.('voiceschanged', fill);
-  onLangChange(fill);
-  fill();
+  // A broken voice list must never stop the page from loading.
+  const safeFill = () => { try { fill(); } catch { /* keep whatever is there */ } };
+  if (canSpeak()) speechSynthesis.addEventListener?.('voiceschanged', safeFill);
+  onLangChange(safeFill);
+  safeFill();
 }
