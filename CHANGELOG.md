@@ -2,6 +2,12 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.11.1 — 2026-10-07
+
+- Changed: the buttons that move you forward stand out. They're now brand yellow with a slow, soft pulse (a static ring if your system asks for reduced motion).
+- Puzzles and lesson tasks: **Continue** sits right under the explanation, above the move box, and says what it does ("Continue: see Black's reply").
+- Lessons: a full-width **Next slide** button under the slide text (or under the solved task), in addition to Next below the board.
+
 ## 0.11.0 — 2026-10-07
 
 - Added: lessons at `/lesson/`. An agent writes a lesson as JSON: a primer, then slides with positions, moves, explanations, colored arrows (green, red, blue, yellow), highlighted squares and move tags. Any slide can hold a task, which works like a puzzle (hints, wrong-move explanations with Retry, reply arrows with Continue), and Next unlocks once it's solved. Lessons can also be pure slideshows.

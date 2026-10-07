@@ -212,12 +212,20 @@ export function renderFeedback(box, feedback, emptyText) {
   if (!feedback.length && emptyText) box.replaceChildren(el('p', { class: 'fb info', text: emptyText }));
 }
 
-// Retry / Continue / Hint buttons for an unsolved solver.
+// The Continue button, shown right under the explanation while the reply arrows are up
+// (the caller puts it above the move box). Empty when there's nothing to continue.
+export function continueButton(S) {
+  if (!S.paused) return [];
+  const side = COLOR[S.chess.turn()];
+  return [el('button', { class: 'btn go wide', type: 'button', id: 'pz-continue', onclick: () => S.cont() },
+    `Continue: see ${side}'s reply`, el('span', { 'aria-hidden': 'true', text: '▶' }))];
+}
+
+// Retry / Hint buttons for an unsolved solver.
 export function solverButtons(S, { onRetry } = {}) {
   const out = [];
   if (S.solved) return out;
   if (S.wrongChess) out.push(el('button', { class: 'btn primary', type: 'button', text: 'Retry', id: 'pz-retry', onclick: () => { S.retry(); if (onRetry) onRetry(); } }));
-  if (S.paused) out.push(el('button', { class: 'btn primary', type: 'button', text: 'Continue', id: 'pz-continue', onclick: () => S.cont() }));
   if (!S.paused && !S.wrongChess) {
     out.push(el('button', { class: 'btn', type: 'button', text: S.hintLabel(), id: 'pz-hint', disabled: !S.canMove() || !!S.revealed[S.step], onclick: () => S.hint() }));
   }

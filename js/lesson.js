@@ -7,7 +7,7 @@ import { $, el, copy, wireStyleMenu } from './ui.js';
 import { TAGS } from './tags.js';
 import { validateLesson, LESSON_TOPIC_PREFIX } from './lesson-core.js';
 import { drawBoard, wireBoardInput, askPromotion, parseTyped } from './board-view.js';
-import { Solver, COLOR, renderFeedback, solverButtons } from './solver.js';
+import { Solver, COLOR, renderFeedback, solverButtons, continueButton } from './solver.js';
 import { loadShared, permanentLink } from './share-load.js';
 
 const L = {
@@ -201,6 +201,7 @@ function render() {
     $('ls-task-prompt').replaceChildren(...rich(s.task.prompt || 'Find the best move.'));
     renderFeedback($('ls-feedback'), S.feedback, 'Make your move on the board or type it below.');
     if (S.solved && s.task.done) $('ls-feedback').append(el('div', { class: 'ls-done-note rich' }, ...rich(s.task.done)));
+    $('ls-progress').replaceChildren(...continueButton(S));
     $('move-form').hidden = S.solved;
     $('move-input').disabled = !canMove();
     const acts = solverButtons(S, { onRetry: () => { if (canMove()) $('move-input').focus(); } });
@@ -233,6 +234,10 @@ function render() {
   const nextBtn = $('ls-next');
   nextBtn.disabled = L.finished || locked;
   nextBtn.textContent = L.idx === n - 1 ? 'Finish ✓' : 'Next ▶';
+  nextBtn.classList.toggle('go', !nextBtn.disabled);
+  // A second Next right under the slide text, where the reader's eyes already are.
+  $('ls-inline-next').replaceChildren(...(L.finished || locked ? [] : [el('button', { class: 'btn go wide', type: 'button', id: 'ls-next-inline', onclick: next },
+    L.idx === n - 1 ? 'Finish the lesson' : 'Next slide', el('span', { 'aria-hidden': 'true', text: L.idx === n - 1 ? '✓' : '▶' }))]));
   nextBtn.title = locked ? 'Solve the task to go on' : '';
   $('ls-count').textContent = `${L.idx + 1} / ${n}`;
   $('ls-dots').replaceChildren(...ls.slides.map((x, i) => el('button', {

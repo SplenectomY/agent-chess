@@ -408,6 +408,19 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 .sq.hl::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .42; background: var(--hl); }
 .sq.hl-green { --hl: var(--better); } .sq.hl-red { --hl: var(--alert); } .sq.hl-blue { --hl: #3f7fd0; } .sq.hl-yellow { --hl: #e0a800; }
 
+/* "go on" buttons (puzzle Continue, lesson Next): brand yellow with a slow, soft pulse */
+.btn.go { background: var(--signal); border-color: var(--signal); color: #1c2433; font-weight: 750; animation: go-pulse 2.2s ease-out infinite; }
+.btn.go:hover { background: color-mix(in srgb, var(--signal) 85%, #fff); }
+.btn.go:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.btn.wide { width: 100%; min-height: 46px; justify-content: center; }
+@keyframes go-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--signal) 70%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--signal) 0%, transparent); }
+}
+.pz-progress:empty { display: none; }
+.pz-progress { margin: 0 0 14px; }
+.ls-inline-next { margin: 16px 0 0; }
+
 /* ---------- lesson page ---------- */
 .ls-nav { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .ls-nav .btn { min-width: 96px; }
@@ -564,4 +577,5 @@ details.panel[open] summary { margin-bottom: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
+  .btn.go { box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 45%, transparent); }
 }

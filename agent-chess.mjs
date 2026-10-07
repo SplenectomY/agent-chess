@@ -3185,7 +3185,7 @@ function joinParts(events) {
 }
 
 // js/version.js
-var VERSION = "0.11.0";
+var VERSION = "0.11.1";
 
 // js/lesson-core.js
 var LESSON_TOPIC_PREFIX = "agentchess-lesson-v1-";

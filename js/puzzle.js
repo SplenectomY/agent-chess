@@ -7,7 +7,7 @@ import { $, el, copy, wireStyleMenu } from './ui.js';
 import { TAGS } from './tags.js';
 import { validatePuzzle, PUZZLE_TOPIC_PREFIX } from './puzzle-core.js';
 import { drawBoard, wireBoardInput, askPromotion, parseTyped } from './board-view.js';
-import { Solver, COLOR, renderFeedback, solverButtons } from './solver.js';
+import { Solver, COLOR, renderFeedback, solverButtons, continueButton } from './solver.js';
 import { loadShared, permanentLink } from './share-load.js';
 
 const P = {
@@ -51,6 +51,7 @@ function render() {
   renderBoard();
   $('pz-turn').replaceChildren(el('span', { class: `pb-swatch ${P.pz.solverColor}`, 'aria-hidden': 'true' }), S.statusText());
   renderFeedback($('pz-feedback'), S.feedback, 'Make your move on the board or type it below.');
+  $('pz-progress').replaceChildren(...continueButton(S));
   $('move-form').hidden = S.solved;
   $('move-input').disabled = !canMove();
   const acts = solverButtons(S, { onRetry: () => { if (canMove()) $('move-input').focus(); } });
