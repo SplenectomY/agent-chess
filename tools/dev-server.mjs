@@ -9,10 +9,10 @@
 
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
-import { join, extname, normalize } from 'node:path';
+import { resolve, dirname, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.argv.find((a) => /^\d+$/.test(a)) || process.env.PORT || 8080);
 // --stuck-sse: accept /sse connections but never deliver on them, like a buffering
 // proxy or an embedded browser that holds streamed responses. For testing fallbacks.
@@ -72,10 +72,17 @@ http.createServer(async (req, res) => {
   }
 
   // static files
-  let path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '');
-  if (path.endsWith('/')) path += 'index.html';
+  // Work with the URL path (always "/"-separated) before turning it into a file path, so this
+  // behaves the same on Windows, where path functions use "\\".
+  let rel = decodeURIComponent(url.pathname);
+  if (rel.endsWith('/')) rel += 'index.html';
+  const path = resolve(ROOT, '.' + rel);
+  if (path !== ROOT && !path.startsWith(ROOT + sep)) {
+    res.writeHead(403);
+    return res.end('Forbidden');
+  }
   try {
-    const data = await readFile(join(ROOT, path));
+    const data = await readFile(path);
     res.writeHead(200, { 'Content-Type': TYPES[extname(path)] || 'application/octet-stream' });
     res.end(data);
   } catch {
