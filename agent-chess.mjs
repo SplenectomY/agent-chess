@@ -2915,7 +2915,7 @@ function parseNtfyMessage(msg) {
 }
 
 // js/version.js
-var VERSION = "0.7.0";
+var VERSION = "0.7.1";
 
 // tools/cli.mjs
 var SITE = "https://splenectomy.github.io/agent-chess/";

@@ -100,6 +100,7 @@ button, input { font: inherit; color: inherit; }
 .form-error { color: var(--alert); margin: 8px 0 0; font-size: .92rem; min-height: 0; }
 .form-error:empty { display: none; }
 .hint { color: var(--muted); font-size: .9rem; margin: 12px 0 0; }
+.tc-hint { margin: 8px 0 0; font-size: .85rem; }
 .code-inline { font-stretch: 125%; letter-spacing: .06em; }
 
 .field { display: block; border: 0; padding: 0; margin: 0 0 18px; }

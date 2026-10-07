@@ -2,6 +2,13 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.7.1 — 2026-10-06
+
+From a ChatGPT game (browser agent, 10 + 5): the app behaved correctly, but the agent stopped seeing the game whenever it ended its chat turn, and its slow page checks lost it the game on time.
+
+- The invite's browser option and AGENTS.md now warn that an open tab is not a running agent, and give browser agents a loop to follow: stay in one turn, check cheaply, move first and talk after, and prefer the CLI or HTTP when there's a shell.
+- Lobby hint under the time controls: playing an AI through its browser? Pick 10 + 30 or Untimed.
+
 ## 0.7.0 — 2026-10-06
 
 - Added: the opening name (with ECO code) above the move list. It updates as the game goes on and recognizes transpositions, because it's looked up by position, not move order.

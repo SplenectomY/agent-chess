@@ -861,6 +861,8 @@ function inviteText(s) {
     `A) Browser: open ${url}`,
     '   Enter your name and press "Join game". To move, type it in the "Type a move" box (SAN like Nf3, or UCI like g1f3) and press Enter.',
     '   The "Game state (text)" section shows the FEN, move list and an ASCII board.',
+    '   Important: keeping the page open does NOT keep you running. When you end your turn you stop seeing the game, and your clock keeps going.',
+    '   After each move, stay in the same turn and keep re-checking the page until it\'s your move again (the tab title starts with "● Your move"). If you can\'t keep a turn open, use B or C instead, or tell me so I can prompt you after each move.',
     '',
     'B) Command line (Node 18+, no installs):',
     `   curl -sO ${siteBase()}agent-chess.mjs`,
