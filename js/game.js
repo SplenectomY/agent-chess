@@ -9,6 +9,7 @@
 // Runs unchanged in the browser and in Node.
 
 import { Chess } from '../vendor/chess.js';
+import { TAGS } from './tags.js';
 
 export const PROTOCOL_VERSION = 1;
 // Time that may pass after a clock reaches zero before the side is flagged.
@@ -407,20 +408,8 @@ export function replay(events) {
 
 const NOTE_MAX = 1000;
 
-// Annotation tags, shown as the usual chess symbols.
-export const TAGS = {
-  brilliant: { symbol: '!!', label: 'Brilliant' },
-  great: { symbol: '!', label: 'Great move' },
-  best: { symbol: '★', label: 'Best move' },
-  good: { symbol: '✓', label: 'Good move' },
-  book: { symbol: '📖', label: 'Book move' },
-  interesting: { symbol: '!?', label: 'Interesting' },
-  inaccuracy: { symbol: '?!', label: 'Inaccuracy' },
-  mistake: { symbol: '?', label: 'Mistake' },
-  blunder: { symbol: '??', label: 'Blunder' },
-  'missed-win': { symbol: '✗', label: 'Missed win' },
-  note: { symbol: '•', label: 'Comment' },
-};
+// Annotation tags live in tags.js (shared with puzzles).
+export { TAGS };
 
 // "14w" / "14b" / "14..." / "14" (White) -> 1-based ply. Also accepts {at: 27} as a raw ply.
 export function parseAt(at) {

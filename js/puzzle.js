@@ -6,7 +6,7 @@ import { VERSION } from './version.js';
 import { $, el, toast, copy, pieceNode, PIECE_NAME, wireStyleMenu } from './ui.js';
 import { DEFAULT_RELAY, parseNtfyLine } from './relay.js';
 import {
-  validatePuzzle, judgeMove, wrongMessage, decodeFragment, joinParts, inflate, fromBase64Url, utf8,
+  validatePuzzle, judgeMove, wrongEntry, TAGS, decodeFragment, joinParts, inflate, fromBase64Url, utf8,
   PUZZLE_TOPIC_PREFIX, encodeFragment,
 } from './puzzle-core.js';
 
@@ -27,6 +27,10 @@ const P = {
   flash: null, // { from, to, kind: 'bad' } briefly shows a wrong move
   wrongChess: null,
   arrow: null, // { from, to } for a revealed answer
+  badge: null, // { sq, tag }: tag symbol on the last move's square
+  replyArrows: [], // [{ san, from, to }]: the opponent's possible replies, as green arrows
+  wrongInfo: null, // { tag, replies } for the wrong move on the board
+  paused: false, // waiting for Continue so the player can study the reply arrows
   feedback: [], // [{ kind: 'good'|'bad'|'info'|'hint'|'reply', text }]
   solved: false,
   busy: false, // opponent reply pending
@@ -93,6 +97,20 @@ function renderBoard() {
     checkSq = k && k[0];
   }
   const last = P.replay != null ? (P.replay ? P.pz.line[P.replay - 1] : null) : P.flash || P.last;
+  let badge = null;
+  let arrows = [];
+  if (P.replay != null) {
+    const st = P.replay ? P.pz.line[P.replay - 1] : null;
+    if (st && st.tag) badge = { sq: st.to, tag: st.tag };
+    if (st && st.replies) arrows = st.replies;
+  } else if (P.wrongChess) {
+    const w = P.wrongInfo || {};
+    if (w.tag) badge = { sq: P.flash.to, tag: w.tag };
+    arrows = w.replies || [];
+  } else {
+    badge = P.badge;
+    arrows = [...P.replyArrows, ...(P.arrow ? [P.arrow] : [])];
+  }
   const squares = [];
   for (let r = 0; r < 8; r++) {
     for (let f = 0; f < 8; f++) {
@@ -109,32 +127,32 @@ function renderBoard() {
       const label = piece ? `${sq}, ${piece.color === 'w' ? 'white' : 'black'} ${PIECE_NAME[piece.type]}` : sq;
       const node = el('button', { class: cls, type: 'button', 'data-sq': sq, 'aria-label': label, tabindex: '-1' });
       if (piece) node.append(pieceNode(piece.color, piece.type));
+      if (badge && badge.sq === sq) node.append(el('span', { class: `badge tag-${badge.tag}`, 'aria-hidden': 'true', text: TAGS[badge.tag].symbol }));
       if (r === 7) node.append(el('span', { class: 'coord file', text: files[file] }));
       if (f === 0) node.append(el('span', { class: 'coord rank', text: String(rank) }));
       squares.push(node);
     }
   }
   $('board').replaceChildren(...squares);
-  // Arrow for a revealed answer.
+  // Green arrows: a revealed answer, or the opponent's possible replies.
   const g = $('arrows');
-  g.replaceChildren();
-  if (P.arrow && P.replay == null) {
-    const xy = (sq) => {
-      const file = sq.charCodeAt(0) - 97;
-      const rank = Number(sq[1]);
-      return flip ? [7 - file + 0.5, rank - 0.5] : [file + 0.5, 8 - rank + 0.5];
-    };
-    const [x1, y1] = xy(P.arrow.from);
-    const [x2, y2] = xy(P.arrow.to);
+  const xy = (sq) => {
+    const file = sq.charCodeAt(0) - 97;
+    const rank = Number(sq[1]);
+    return flip ? [7 - file + 0.5, rank - 0.5] : [file + 0.5, 8 - rank + 0.5];
+  };
+  const NS = 'http://www.w3.org/2000/svg';
+  g.replaceChildren(...arrows.map((a) => {
+    const [x1, y1] = xy(a.from);
+    const [x2, y2] = xy(a.to);
     const len = Math.hypot(x2 - x1, y2 - y1);
-    const NS = 'http://www.w3.org/2000/svg';
     const line = document.createElementNS(NS, 'line');
     for (const [k, v] of Object.entries({ x1, y1, x2: x2 - ((x2 - x1) / len) * 0.32, y2: y2 - ((y2 - y1) / len) * 0.32, class: 'arrow-better', 'marker-end': 'url(#arrowhead)' })) line.setAttribute(k, v);
-    g.append(line);
-  }
+    return line;
+  }));
 }
 
-const canMove = () => !!P.pz && !P.solved && !P.busy && P.replay == null && !P.wrongChess && P.step < P.pz.line.length && P.pz.line[P.step].solver;
+const canMove = () => !!P.pz && !P.solved && !P.busy && P.replay == null && !P.wrongChess && !P.paused && P.step < P.pz.line.length && P.pz.line[P.step].solver;
 
 function attempt(from, to, promotion) {
   if (!canMove()) return false;
@@ -187,17 +205,27 @@ function play(text) {
     P.chess = trial;
     P.last = { from: mv.from, to: mv.to };
     P.arrow = null;
+    // The tag belongs to the intended move; an accepted alternative gets no symbol.
+    P.badge = step.tag && mv.san === step.move ? { sq: mv.to, tag: step.tag } : null;
+    P.replyArrows = step.replies || [];
     const alt = mv.san !== step.move ? ` (${step.move} also works.)` : '';
-    P.feedback.push({ kind: 'good', text: `${mv.san}: correct!${alt}${step.explain ? ' ' + step.explain : ''}` });
+    P.feedback.push({ kind: 'good', tag: P.badge && step.tag, text: `${mv.san}: correct!${alt}${step.explain ? ' ' + step.explain : ''}` });
+    if (step.replies) P.feedback.push({ kind: 'reply', text: repliesText(step.replies) });
     P.step++;
+    if (step.replies && P.step < P.pz.line.length) {
+      P.paused = true; // let the player study the arrows; Continue plays the reply
+      render();
+      return;
+    }
     advance();
   } else {
     P.mistakes++;
     // Leave the wrong move on the board so the solver can study it; Retry takes it back.
     P.wrongChess = trial;
     P.flash = { from: mv.from, to: mv.to };
-    const why = wrongMessage(step, mv.san);
-    P.feedback.push({ kind: 'bad', text: `${mv.san} isn't it.${why ? ' ' + why : ''} Press Retry when you're ready to try again.` });
+    const w = wrongEntry(step, mv.san) || {};
+    P.wrongInfo = { tag: w.tag, replies: w.replies };
+    P.feedback.push({ kind: 'bad', tag: w.tag, text: `${mv.san} isn't it.${w.text ? ' ' + w.text : ''}${w.replies ? ' ' + repliesText(w.replies) : ''} Press Retry when you're ready to try again.` });
   }
   render();
 }
@@ -220,7 +248,9 @@ function advance() {
   setTimeout(() => {
     const mv = P.chess.move(next.move);
     P.last = { from: mv.from, to: mv.to };
-    P.feedback.push({ kind: 'reply', text: `${COLOR[mv.color]} replies ${mv.san}.${next.explain ? ' ' + next.explain : ''}` });
+    P.badge = next.tag ? { sq: mv.to, tag: next.tag } : null;
+    P.replyArrows = [];
+    P.feedback.push({ kind: 'reply', tag: next.tag, text: `${COLOR[mv.color]} replies ${mv.san}.${next.explain ? ' ' + next.explain : ''}` });
     P.step++;
     P.busy = false;
     advance();
@@ -245,10 +275,27 @@ function hint() {
   render();
 }
 
+// "Black can answer Rxc8 (forced) or Kf8: see the green arrows."
+function repliesText(list) {
+  const names = list.map((r) => r.san + (r.text ? ` (${r.text})` : ''));
+  const joined = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : names[0];
+  const side = COLOR[P.pz.solverColor === 'w' ? 'b' : 'w'];
+  return `${side} can answer ${joined}: see the green arrow${list.length > 1 ? 's' : ''}.`;
+}
+
+// Play the opponent's reply after the player has looked at the reply arrows.
+function cont() {
+  if (!P.paused) return;
+  P.paused = false;
+  P.replyArrows = [];
+  advance();
+}
+
 // Take back the wrong move that's on the board.
 function retry() {
   if (!P.wrongChess) return;
   P.wrongChess = null;
+  P.wrongInfo = null;
   P.flash = null;
   P.sel = null;
   render();
@@ -258,7 +305,7 @@ function retry() {
 function restart() {
   Object.assign(P, {
     chess: new Chess(P.pz.fen), step: 0, mistakes: 0, hintsUsed: 0, hintLevel: {}, revealed: {}, sel: null,
-    last: null, flash: null, wrongChess: null, arrow: null, feedback: [], solved: false, busy: false, replay: null,
+    last: null, flash: null, wrongChess: null, wrongInfo: null, arrow: null, badge: null, replyArrows: [], paused: false, feedback: [], solved: false, busy: false, replay: null,
   });
   $('pz-done').hidden = true;
   if (P.pz.opponentFirst) advance();
@@ -272,11 +319,13 @@ function render() {
   const toMove = P.chess.turn();
   $('pz-turn').replaceChildren(
     el('span', { class: `pb-swatch ${pz.solverColor}`, 'aria-hidden': 'true' }),
-    P.solved ? 'Solved!' : P.wrongChess ? 'Not quite. Press Retry to take it back.' : P.busy ? `${COLOR[toMove]} is replying…` : `${COLOR[pz.solverColor]} to move`,
+    P.solved ? 'Solved!' : P.wrongChess ? 'Not quite. Press Retry to take it back.' : P.paused ? 'Look at the replies, then press Continue.' : P.busy ? `${COLOR[toMove]} is replying…` : `${COLOR[pz.solverColor]} to move`,
   );
   // Feedback: the latest few messages, newest last.
   const fb = $('pz-feedback');
-  fb.replaceChildren(...P.feedback.slice(-4).map((f) => el('p', { class: `fb ${f.kind}`, text: f.text })));
+  fb.replaceChildren(...P.feedback.slice(-4).map((f) => el('p', { class: `fb ${f.kind}` },
+    f.tag ? el('span', { class: `rv-tag tag-${f.tag}` }, el('b', { text: TAGS[f.tag].symbol }), ` ${TAGS[f.tag].label}`) : null,
+    f.tag ? ' ' : null, f.text)));
   if (!P.feedback.length) fb.replaceChildren(el('p', { class: 'fb info', text: 'Make your move on the board or type it below.' }));
 
   $('move-form').hidden = P.solved;
@@ -288,8 +337,9 @@ function render() {
     const hints = (step && step.hints) || [];
     const shown = P.hintLevel[P.step] || 0;
     if (P.wrongChess) acts.push(el('button', { class: 'btn primary', type: 'button', text: 'Retry', id: 'pz-retry', onclick: retry }));
+    if (P.paused) acts.push(el('button', { class: 'btn primary', type: 'button', text: 'Continue', id: 'pz-continue', onclick: cont }));
     const label = shown < hints.length ? (shown ? 'Another hint' : 'Hint') : P.revealed[P.step] ? 'Answer shown' : 'Show the answer';
-    acts.push(el('button', { class: 'btn', type: 'button', text: label, disabled: !canMove() || !!P.revealed[P.step], onclick: hint }));
+    if (!P.paused && !P.wrongChess) acts.push(el('button', { class: 'btn', type: 'button', text: label, disabled: !canMove() || !!P.revealed[P.step], onclick: hint }));
     acts.push(el('button', { class: 'btn', type: 'button', text: 'Start over', onclick: restart }));
   }
   acts.push(el('button', { class: 'btn', type: 'button', text: 'Copy link', onclick: copyLink }));
@@ -311,7 +361,8 @@ function renderDone() {
     const num = c.moveNumber();
     const label = c.turn() === 'w' ? `${num}. ${st.move}` : `${num}... ${st.move}`;
     return el('li', { class: st.solver ? 'mine' : 'theirs' },
-      el('button', { class: 'op-move' + (P.replay === i + 1 ? ' current' : ''), type: 'button', text: label, onclick: () => { P.replay = i + 1; render(); } }),
+      el('button', { class: 'op-move' + (P.replay === i + 1 ? ' current' : ''), type: 'button', onclick: () => { P.replay = i + 1; render(); } },
+        label, st.tag ? el('span', { class: `sym tag-${st.tag}`, title: TAGS[st.tag].label, text: TAGS[st.tag].symbol }) : null),
       st.explain ? el('span', { text: ' ' + st.explain }) : null);
   });
   box.replaceChildren(
@@ -332,9 +383,13 @@ function renderTextState() {
   const lines = [
     `Puzzle: ${P.pz.title}${P.pz.author ? ` by ${P.pz.author}` : ''}`,
     `You play: ${COLOR[P.pz.solverColor]}`,
-    `Status: ${P.solved ? 'solved' : P.wrongChess ? 'wrong move on the board; press Retry to take it back' : canMove() ? 'your move' : 'opponent replying'}`,
+    `Status: ${P.solved ? 'solved' : P.wrongChess ? 'wrong move on the board; press Retry to take it back' : P.paused ? 'press Continue' : canMove() ? 'your move' : 'opponent replying'}`,
     `FEN: ${c.fen()}`,
   ];
+  if (P.wrongChess) lines.push(`Wrong move on the board: ${P.flash ? P.flash.from + P.flash.to : ''}`);
+  const shown = P.wrongChess ? (P.wrongInfo && P.wrongInfo.replies) || [] : P.replyArrows;
+  if (shown.length) lines.push(`Green arrows (opponent's possible replies): ${shown.map((r) => `${r.san} (${r.from}-${r.to})`).join(', ')}`);
+  if (P.paused) lines.push('Press Continue to see the reply.');
   if (canMove()) lines.push(`Legal moves: ${c.moves().join(' ')}`);
   $('text-state').textContent = lines.join('\n');
 }

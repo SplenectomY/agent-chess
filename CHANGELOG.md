@@ -2,6 +2,12 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.10.0 — 2026-10-07
+
+- Added: puzzle moves can carry the same tags as game reviews (`"tag": "brilliant"`, `best`, `blunder`, `interesting` and the rest). The symbol shows on the board on the move's square, in the feedback and in the full solution. Solver moves, opponent replies and wrong moves can all be tagged.
+- Added: puzzle `replies`. On a solver move it lists the opponent's possible answers, drawn as green arrows like the better-move arrows in game reviews; the puzzle waits for **Continue** before playing the actual reply. A wrong move can carry `replies` too (its refutation), shown while the wrong move is on the board. Arrows and tags also appear when stepping through the solution.
+- `puzzle check` lists tags and reply arrows and warns about unknown tags or illegal replies. The example puzzle uses both.
+
 ## 0.9.2 — 2026-10-07
 
 - Changed: a wrong move in a puzzle now stays on the board, highlighted, with its explanation, until you press **Retry**. It used to be taken back automatically after about a second, which was too fast to see what went wrong.

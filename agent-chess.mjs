@@ -2336,6 +2336,41 @@ class Chess {
   }
 }
 
+// js/tags.js
+var TAGS = {
+  brilliant: { symbol: "!!", label: "Brilliant" },
+  great: { symbol: "!", label: "Great move" },
+  best: { symbol: "★", label: "Best move" },
+  good: { symbol: "✓", label: "Good move" },
+  book: { symbol: "\uD83D\uDCD6", label: "Book move" },
+  interesting: { symbol: "!?", label: "Interesting" },
+  inaccuracy: { symbol: "?!", label: "Inaccuracy" },
+  mistake: { symbol: "?", label: "Mistake" },
+  blunder: { symbol: "??", label: "Blunder" },
+  "missed-win": { symbol: "✗", label: "Missed win" },
+  note: { symbol: "•", label: "Comment" }
+};
+function tagKey(v) {
+  if (typeof v !== "string" || !v.trim())
+    return null;
+  const t = v.trim().toLowerCase();
+  const k = t.replace(/[\s_]+/g, "-");
+  if (TAGS[k])
+    return k;
+  if (k === "best-move")
+    return "best";
+  if (k === "great-move")
+    return "great";
+  if (k === "good-move")
+    return "good";
+  if (k === "book-move")
+    return "book";
+  if (k === "comment")
+    return "note";
+  const bySymbol = Object.keys(TAGS).find((key) => TAGS[key].symbol === t);
+  return bySymbol || null;
+}
+
 // js/game.js
 var PROTOCOL_VERSION = 1;
 var GRACE_MS = 1000;
@@ -2759,19 +2794,6 @@ function replay(events) {
   return s;
 }
 var NOTE_MAX = 1000;
-var TAGS = {
-  brilliant: { symbol: "!!", label: "Brilliant" },
-  great: { symbol: "!", label: "Great move" },
-  best: { symbol: "★", label: "Best move" },
-  good: { symbol: "✓", label: "Good move" },
-  book: { symbol: "\uD83D\uDCD6", label: "Book move" },
-  interesting: { symbol: "!?", label: "Interesting" },
-  inaccuracy: { symbol: "?!", label: "Inaccuracy" },
-  mistake: { symbol: "?", label: "Mistake" },
-  blunder: { symbol: "??", label: "Blunder" },
-  "missed-win": { symbol: "✗", label: "Missed win" },
-  note: { symbol: "•", label: "Comment" }
-};
 function parseAt(at) {
   if (typeof at === "number")
     return Number.isInteger(at) && at > 0 ? at : null;
@@ -3009,9 +3031,49 @@ function validatePuzzle(input) {
       errors.push(`${where}: "${step.move}" isn't a legal move here (${chess.turn() === "w" ? "White" : "Black"} to move, FEN ${fenBefore}).`);
       return;
     }
+    const tagOf = (v, what) => {
+      if (v == null || v === "")
+        return;
+      const k = tagKey(v);
+      if (!k)
+        warnings.push(`${where}: ${what} tag "${v}" isn't one of ${Object.keys(TAGS).join(", ")}, so it's ignored.`);
+      return k && k !== "note" ? k : undefined;
+    };
+    const repliesOf = (list, fen, what) => {
+      if (list == null)
+        return;
+      const out = [];
+      for (const r of Array.isArray(list) ? list : [list]) {
+        const moveText = typeof r === "string" ? r : r && r.move;
+        const m = tryMove2(new Chess(fen), moveText);
+        if (!m) {
+          warnings.push(`${where}: ${what} reply "${moveText}" isn't legal there, so its arrow is left out.`);
+          continue;
+        }
+        if (out.some((x) => x.san === m.san))
+          continue;
+        const o = { san: m.san, from: m.from, to: m.to };
+        if (r && typeof r === "object" && r.text)
+          o.text = str(r.text, 300);
+        out.push(o);
+      }
+      return out.length ? out : undefined;
+    };
     const out = { move: mv.san, uci: mv.from + mv.to + (mv.promotion || ""), from: mv.from, to: mv.to, solver, fenBefore, fenAfter: chess.fen() };
     if (step.explain)
       out.explain = str(step.explain);
+    const tag = tagOf(step.tag, "the");
+    if (tag)
+      out.tag = tag;
+    if (step.replies != null) {
+      if (!solver)
+        warnings.push(`${where}: "replies" only works on your own moves (it shows the opponent's possible answers), so it's ignored here.`);
+      else {
+        const rep = repliesOf(step.replies, out.fenAfter, "the");
+        if (rep)
+          out.replies = rep;
+      }
+    }
     if (solver) {
       const accept = [];
       for (const a of Array.isArray(step.accept) ? step.accept : []) {
@@ -3029,8 +3091,15 @@ function validatePuzzle(input) {
       if (step.wrong && typeof step.wrong === "object") {
         const wrong = {};
         for (const [k, v] of Object.entries(step.wrong)) {
+          const obj = v && typeof v === "object" ? v : { text: v };
+          const entry = { text: str(obj.text) };
+          const wtag = tagOf(obj.tag, `wrong move "${k}"`);
+          if (wtag)
+            entry.tag = wtag;
           if (k === "*") {
-            wrong["*"] = str(v);
+            if (obj.replies != null)
+              warnings.push(`${where}: the "*" fallback can't have replies (the move isn't known), so they're ignored.`);
+            wrong["*"] = entry;
             continue;
           }
           const m = check(k);
@@ -3038,8 +3107,14 @@ function validatePuzzle(input) {
             warnings.push(`${where}: wrong-move key "${k}" isn't legal there, so its explanation is never shown.`);
           else if (m.san === mv.san || accept.includes(m.san))
             warnings.push(`${where}: "${k}" is listed as wrong but it's the correct move.`);
-          else
-            wrong[m.san] = str(v);
+          else {
+            const after = new Chess(fenBefore);
+            after.move(m.san);
+            const rep = repliesOf(obj.replies, after.fen(), `wrong move ${m.san}:`);
+            if (rep)
+              entry.replies = rep;
+            wrong[m.san] = entry;
+          }
         }
         if (Object.keys(wrong).length)
           out.wrong = wrong;
@@ -3107,7 +3182,7 @@ function joinParts(events) {
 }
 
 // js/version.js
-var VERSION = "0.9.2";
+var VERSION = "0.10.0";
 
 // tools/cli.mjs
 var SITE = (() => {
@@ -3649,7 +3724,13 @@ function describePuzzle(pz) {
   const lines = [`"${pz.title}"${pz.author ? ` by ${pz.author}` : ""}: ${pz.solverColor === "w" ? "White" : "Black"} to solve, ${pz.line.filter((x) => x.solver).length} move(s) to find.`];
   pz.line.forEach((st, i) => {
     const extra = st.solver ? ` [${(st.hints || []).length} hint(s)${st.wrong ? `, explains ${Object.keys(st.wrong).filter((k) => k !== "*").join(" ") || "other moves"}${st.wrong["*"] ? " + fallback" : ""}` : ""}${st.accept ? `, also accepts ${st.accept.join(" ")}` : ""}${st.anyMate ? ", any mate accepted" : ""}]` : " (auto-played)";
-    lines.push(`  ${i + 1}. ${st.solver ? "solver" : "opponent"}: ${st.move}${extra}`);
+    const sym = st.tag ? ` ${TAGS[st.tag].symbol} (${TAGS[st.tag].label})` : "";
+    const rep = st.replies ? `; arrows for replies ${st.replies.map((r) => r.san).join(" ")} (player presses Continue)` : "";
+    lines.push(`  ${i + 1}. ${st.solver ? "solver" : "opponent"}: ${st.move}${sym}${extra}${rep}`);
+    for (const [k, w] of Object.entries(st.wrong || {})) {
+      if (w.tag || w.replies)
+        lines.push(`       wrong ${k}${w.tag ? ` ${TAGS[w.tag].symbol}` : ""}${w.replies ? `, arrows for replies ${w.replies.map((r) => r.san).join(" ")}` : ""}`);
+    }
   });
   return lines.join(`
 `);

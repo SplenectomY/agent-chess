@@ -14,9 +14,14 @@
 //       "accept": ["Nxf7+"],                  // optional other moves that also count as correct
 //       "hints": ["Look for a check.", "Which piece can attack king and queen at once?"],
 //       "explain": "A fork: the knight checks the king and hits the queen.",
-//       "wrong": { "Qxd8": "Black recaptures and you've only traded.", "*": "Fallback for any other move." }
+//       "wrong": { "Qxd8": "Black recaptures and you've only traded.", "*": "Fallback for any other move." },
+//       "tag": "brilliant",                   // optional symbol on the move (same tags as game reviews)
+//       "replies": ["Kg8", "Kh8"]             // optional: opponent replies drawn as green arrows after
+//                                             // this move (the player presses Continue to go on)
 //     },
 //     { "move": "Kg8", "explain": "Forced: the king has only one square." },   // opponent reply
+//     // A "wrong" value can also be an object: { "text": "...", "tag": "blunder", "replies": ["Kxg7"] }
+//     // (replies = the opponent's answers to that wrong move, drawn as arrows).
 //     { "move": "Nxd8", "explain": "The queen falls." }
 //   ],
 //   "conclusion": "Analysis of the whole idea, shown when solved."  // optional
@@ -25,6 +30,9 @@
 // On the final solver move, any checkmate also counts as correct.
 
 import { Chess } from '../vendor/chess.js';
+import { TAGS, tagKey } from './tags.js';
+
+export { TAGS };
 
 export const PUZZLE_VERSION = 1;
 export const PUZZLE_TOPIC_PREFIX = 'agentchess-puzzle-v1-';
@@ -82,8 +90,38 @@ export function validatePuzzle(input) {
       errors.push(`${where}: "${step.move}" isn't a legal move here (${chess.turn() === 'w' ? 'White' : 'Black'} to move, FEN ${fenBefore}).`);
       return;
     }
+    const tagOf = (v, what) => {
+      if (v == null || v === '') return undefined;
+      const k = tagKey(v);
+      if (!k) warnings.push(`${where}: ${what} tag "${v}" isn't one of ${Object.keys(TAGS).join(', ')}, so it's ignored.`);
+      return k && k !== 'note' ? k : undefined;
+    };
+    // Opponent replies to draw as arrows, checked in the position `fen`.
+    const repliesOf = (list, fen, what) => {
+      if (list == null) return undefined;
+      const out = [];
+      for (const r of Array.isArray(list) ? list : [list]) {
+        const moveText = typeof r === 'string' ? r : r && r.move;
+        const m = tryMove(new Chess(fen), moveText);
+        if (!m) { warnings.push(`${where}: ${what} reply "${moveText}" isn't legal there, so its arrow is left out.`); continue; }
+        if (out.some((x) => x.san === m.san)) continue;
+        const o = { san: m.san, from: m.from, to: m.to };
+        if (r && typeof r === 'object' && r.text) o.text = str(r.text, 300);
+        out.push(o);
+      }
+      return out.length ? out : undefined;
+    };
     const out = { move: mv.san, uci: mv.from + mv.to + (mv.promotion || ''), from: mv.from, to: mv.to, solver, fenBefore, fenAfter: chess.fen() };
     if (step.explain) out.explain = str(step.explain);
+    const tag = tagOf(step.tag, 'the');
+    if (tag) out.tag = tag;
+    if (step.replies != null) {
+      if (!solver) warnings.push(`${where}: "replies" only works on your own moves (it shows the opponent's possible answers), so it's ignored here.`);
+      else {
+        const rep = repliesOf(step.replies, out.fenAfter, 'the');
+        if (rep) out.replies = rep;
+      }
+    }
     if (solver) {
       const accept = [];
       for (const a of Array.isArray(step.accept) ? step.accept : []) {
@@ -97,11 +135,25 @@ export function validatePuzzle(input) {
       if (step.wrong && typeof step.wrong === 'object') {
         const wrong = {};
         for (const [k, v] of Object.entries(step.wrong)) {
-          if (k === '*') { wrong['*'] = str(v); continue; }
+          const obj = v && typeof v === 'object' ? v : { text: v };
+          const entry = { text: str(obj.text) };
+          const wtag = tagOf(obj.tag, `wrong move "${k}"`);
+          if (wtag) entry.tag = wtag;
+          if (k === '*') {
+            if (obj.replies != null) warnings.push(`${where}: the "*" fallback can't have replies (the move isn't known), so they're ignored.`);
+            wrong['*'] = entry;
+            continue;
+          }
           const m = check(k);
           if (!m) warnings.push(`${where}: wrong-move key "${k}" isn't legal there, so its explanation is never shown.`);
           else if (m.san === mv.san || accept.includes(m.san)) warnings.push(`${where}: "${k}" is listed as wrong but it's the correct move.`);
-          else wrong[m.san] = str(v);
+          else {
+            const after = new Chess(fenBefore);
+            after.move(m.san);
+            const rep = repliesOf(obj.replies, after.fen(), `wrong move ${m.san}:`);
+            if (rep) entry.replies = rep;
+            wrong[m.san] = entry;
+          }
         }
         if (Object.keys(wrong).length) out.wrong = wrong;
       }
@@ -136,11 +188,18 @@ export function judgeMove(step, chessAfter, san) {
   return false;
 }
 
-// What to show for a wrong move: specific explanation, the fallback, or null.
-export function wrongMessage(step, san) {
+// What to show for a wrong move: { text, tag?, replies? } (specific entry, else the "*"
+// fallback), or null.
+export function wrongEntry(step, san) {
   if (step.wrong && step.wrong[san]) return step.wrong[san];
   if (step.wrong && step.wrong['*']) return step.wrong['*'];
   return null;
+}
+
+// Just the explanation text for a wrong move, or null.
+export function wrongMessage(step, san) {
+  const e = wrongEntry(step, san);
+  return e && e.text ? e.text : null;
 }
 
 // ---------- links ----------

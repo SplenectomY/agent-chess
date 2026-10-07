@@ -19,11 +19,15 @@ Someone asked you for a chess puzzle. Your job: design a sound puzzle that fits 
   "intro": "White to move and mate in 2.",
   "line": [
     { "move": "Qc8+",
+      "tag": "brilliant",
       "hints": ["The only defender of the back rank is the a8 rook.", "What if that rook had to leave a8?", "Use the queen as bait."],
       "explain": "A queen sacrifice that drags the rook onto c8.",
-      "wrong": { "Qxg7+": "Kxg7: the king takes the queen and the attack is over.", "*": "Look for a forcing check on the 8th rank." } },
+      "replies": [{ "move": "Rxc8", "text": "forced" }],
+      "wrong": {
+        "Qxg7+": { "text": "The king takes the queen and the attack is over.", "tag": "blunder", "replies": ["Kxg7"] },
+        "*": "Look for a forcing check on the 8th rank." } },
     { "move": "Rxc8", "explain": "Forced: the king has no squares." },
-    { "move": "Rxc8#", "hints": ["The c-file is open now."], "explain": "Back-rank mate." }
+    { "move": "Rxc8#", "tag": "best", "hints": ["The c-file is open now."], "explain": "Back-rank mate." }
   ],
   "conclusion": "Why it works, and the lesson to carry into real games."
 }
@@ -35,7 +39,9 @@ Someone asked you for a chess puzzle. Your job: design a sound puzzle that fits 
 | `line` | Moves in order, alternating: solver's move, opponent's reply (played automatically), solver's move, and so on. SAN (`Nf3`) or UCI (`g1f3`). |
 | `hints` | Per solver move, from vague to specific. 2 or 3 is ideal. After the last one the player can reveal the answer. |
 | `explain` | Shown after the move is played: why it works, or what the reply means. |
-| `wrong` | Explanations for tempting wrong moves (keys are moves), plus `"*"` for any other wrong move. Cover the 1 to 3 moves a player is most likely to try. |
+| `wrong` | Explanations for tempting wrong moves (keys are moves), plus `"*"` for any other wrong move. Cover the 1 to 3 moves a player is most likely to try. A value is either text or an object `{ "text", "tag", "replies" }`, where `replies` are the opponent's answers to that wrong move (the refutation), drawn as green arrows. The wrong move stays on the board until the player presses Retry. |
+| `tag` | Optional symbol on the move, the same set as game reviews: `brilliant` !!, `great` !, `best` ★, `good` ✓, `book`, `interesting` !?, `inaccuracy` ?!, `mistake` ?, `blunder` ??, `missed-win`. Works on solver moves, opponent replies and wrong moves. Use it sparingly, for the moves that deserve it. |
+| `replies` | Optional, on solver moves only. The opponent's possible answers to this move, drawn as green arrows after it's played (strings, or `{ "move", "text" }` for a short note such as "forced"). The puzzle then waits for the player to press **Continue** before the reply in `line` is played. Use it to show defenses the player should have considered, not on every move. |
 | `accept` | Other moves that are equally correct at that point (better: design the puzzle so there are none). |
 | `opponentFirst` | If true, `line[0]` is the opponent's move, played first ("Black just played ..., punish it"). |
 | `title`, `author`, `intro`, `conclusion` | Text. `conclusion` is your analysis of the whole idea, shown when it's solved. |

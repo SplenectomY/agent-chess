@@ -9,7 +9,7 @@ import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import * as G from '../js/game.js';
 import { Chess } from '../vendor/chess.js';
 import { DEFAULT_RELAY, topicFor, parseNtfyLine } from '../js/relay.js';
-import { validatePuzzle, toBase64Url, fromBase64Url, splitParts, joinParts, PUZZLE_TOPIC_PREFIX, ID_ALPHABET } from '../js/puzzle-core.js';
+import { TAGS, validatePuzzle, toBase64Url, fromBase64Url, splitParts, joinParts, PUZZLE_TOPIC_PREFIX, ID_ALPHABET } from '../js/puzzle-core.js';
 import { VERSION } from '../js/version.js';
 
 // --site overrides where links point (e.g. a local dev server). Read straight from argv
@@ -482,7 +482,12 @@ function describePuzzle(pz) {
     const extra = st.solver
       ? ` [${(st.hints || []).length} hint(s)${st.wrong ? `, explains ${Object.keys(st.wrong).filter((k) => k !== '*').join(' ') || 'other moves'}${st.wrong['*'] ? ' + fallback' : ''}` : ''}${st.accept ? `, also accepts ${st.accept.join(' ')}` : ''}${st.anyMate ? ', any mate accepted' : ''}]`
       : ' (auto-played)';
-    lines.push(`  ${i + 1}. ${st.solver ? 'solver' : 'opponent'}: ${st.move}${extra}`);
+    const sym = st.tag ? ` ${TAGS[st.tag].symbol} (${TAGS[st.tag].label})` : '';
+    const rep = st.replies ? `; arrows for replies ${st.replies.map((r) => r.san).join(' ')} (player presses Continue)` : '';
+    lines.push(`  ${i + 1}. ${st.solver ? 'solver' : 'opponent'}: ${st.move}${sym}${extra}${rep}`);
+    for (const [k, w] of Object.entries(st.wrong || {})) {
+      if (w.tag || w.replies) lines.push(`       wrong ${k}${w.tag ? ` ${TAGS[w.tag].symbol}` : ''}${w.replies ? `, arrows for replies ${w.replies.map((r) => r.san).join(' ')}` : ''}`);
+    }
   });
   return lines.join('\n');
 }

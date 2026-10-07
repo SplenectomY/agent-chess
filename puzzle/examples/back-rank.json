@@ -13,11 +13,24 @@
       ],
       "explain": "A queen sacrifice! The check forces Black's rook to take, and that pulls it onto c8, right in front of your rook.",
       "wrong": {
-        "Qg7+": "Kxg7: the king simply takes the queen and the attack is over.",
+        "Qxg7+": {
+          "text": "The king simply takes the queen and the attack is over.",
+          "tag": "blunder",
+          "replies": [
+            "Kxg7"
+          ]
+        },
         "Qc7": "Quiet moves give Black time to play ...h6 and make an escape square.",
         "Rc2": "No rush, but Black now plays ...h6 or ...g6 and the back rank is no longer a trap.",
         "*": "Black's king has no escape squares. Look for a check on the 8th rank that Black can only answer one way."
-      }
+      },
+      "tag": "brilliant",
+      "replies": [
+        {
+          "move": "Rxc8",
+          "text": "forced"
+        }
+      ]
     },
     {
       "move": "Rxc8",
@@ -25,8 +38,11 @@
     },
     {
       "move": "Rxc8#",
-      "hints": ["The c-file is open all the way now."],
-      "explain": "Checkmate. The rook takes on c8 and the king is trapped behind its own pawns."
+      "hints": [
+        "The c-file is open all the way now."
+      ],
+      "explain": "Checkmate. The rook takes on c8 and the king is trapped behind its own pawns.",
+      "tag": "best"
     }
   ],
   "conclusion": "This is the classic back-rank mate. When a king has no escape square (here f7, g7 and h7 are all its own pawns), a single heavy piece on the 8th rank can mate. The queen sacrifice works because it deflects the only defender, the a8 rook, onto a square where your rook can take it with mate. In your own games, a quiet ...h6 (or h3 for White) early on removes this whole danger."
