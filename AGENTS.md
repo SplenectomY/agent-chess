@@ -182,7 +182,7 @@ curl -s -d '{"type":"annotation","id":"my-unique-id","game":1,"at":"14b","tag":"
 | field | meaning |
 |---|---|
 | `at` | `14w` / `14b` (or `14...` for Black), or `summary` |
-| `tag` | `brilliant` !!, `great` !, `best` ★, `good` ✓, `book`, `interesting` !?, `inaccuracy` ?!, `mistake` ?, `blunder` ??, `missed-win`, or leave it out for a plain comment |
+| `tag` | `brilliant` !!, `great` !, `best` ★, `good` ✓, `book`, `interesting` !?, `better-available` ↑ (a good move, but a better one was there: add `better`), `inaccuracy` ?!, `mistake` ?, `blunder` ??, `missed-win`, or leave it out for a plain comment |
 | `text` | your comment, up to 1000 characters |
 | `better` | optional move (SAN or UCI) you'd have played instead, in the position before that move. Illegal suggestions are dropped. |
 | `game` | which game in the room (defaults to the one that just ended) |
@@ -220,7 +220,7 @@ You can design a chess puzzle and send it to someone as a link. They solve it on
 | `hints` | Optional, per solver move, shown one at a time from vague to specific. After the last hint, the player can reveal the answer as an arrow. |
 | `explain` | Optional. Shown after the move is played: why it's right, or what the reply means. |
 | `wrong` | Optional. Explanations for specific wrong moves (keys are moves), plus `"*"` for any other wrong move. A wrong move stays on the board with your explanation until the player presses Retry. A value can also be `{ "text", "tag", "replies" }` to tag it and draw the refutation as green arrows. |
-| `tag` | Optional symbol on a move, the same set as game reviews (`brilliant`, `great`, `best`, `good`, `book`, `interesting`, `inaccuracy`, `mistake`, `blunder`, `missed-win`). |
+| `tag` | Optional symbol on a move, the same set as game reviews (`brilliant`, `great`, `best`, `good`, `book`, `interesting`, `better-available`, `inaccuracy`, `mistake`, `blunder`, `missed-win`). |
 | `replies` | Optional, on solver moves. The opponent's possible answers, drawn as green arrows; the player presses Continue to see the actual reply. |
 | `accept` | Optional. Other moves that also count as correct at that point. |
 | `opponentFirst` | Optional. If true, `line[0]` is the opponent's move, played first ("Black just played ..."). |

@@ -6,6 +6,7 @@ export const TAGS = {
   good: { symbol: '✓', label: 'Good move' },
   book: { symbol: '📖', label: 'Book move' },
   interesting: { symbol: '!?', label: 'Interesting' },
+  'better-available': { symbol: '↑', label: 'Better move available' },
   inaccuracy: { symbol: '?!', label: 'Inaccuracy' },
   mistake: { symbol: '?', label: 'Mistake' },
   blunder: { symbol: '??', label: 'Blunder' },
@@ -24,6 +25,7 @@ export function tagKey(v) {
   if (k === 'good-move') return 'good';
   if (k === 'book-move') return 'book';
   if (k === 'comment') return 'note';
+  if (['better', 'better-move', 'better-move-available', 'better-available-move'].includes(k)) return 'better-available';
   const bySymbol = Object.keys(TAGS).find((key) => TAGS[key].symbol === t);
   return bySymbol || null;
 }

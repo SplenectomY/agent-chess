@@ -102,7 +102,8 @@ export class Solver {
       this.flash = { from: mv.from, to: mv.to };
       const w = wrongEntry(step, mv.san) || {};
       this.wrongInfo = { tag: w.tag, replies: w.replies };
-      this.feedback.push({ kind: 'bad', tag: w.tag, text: `${mv.san} isn't it.${w.text ? ' ' + w.text : ''}${w.replies ? ' ' + this.repliesText(w.replies) : ''} Press Retry when you're ready to try again.` });
+      const opener = w.tag === 'better-available' ? `${mv.san} is a good move, but there's a better one.` : `${mv.san} isn't it.`;
+      this.feedback.push({ kind: 'bad', tag: w.tag, text: `${opener}${w.text ? ' ' + w.text : ''}${w.replies ? ' ' + this.repliesText(w.replies) : ''} Press Retry when you're ready to try again.` });
     }
     this.onChange();
   }

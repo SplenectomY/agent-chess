@@ -2344,6 +2344,7 @@ var TAGS = {
   good: { symbol: "✓", label: "Good move" },
   book: { symbol: "\uD83D\uDCD6", label: "Book move" },
   interesting: { symbol: "!?", label: "Interesting" },
+  "better-available": { symbol: "↑", label: "Better move available" },
   inaccuracy: { symbol: "?!", label: "Inaccuracy" },
   mistake: { symbol: "?", label: "Mistake" },
   blunder: { symbol: "??", label: "Blunder" },
@@ -2367,6 +2368,8 @@ function tagKey(v) {
     return "book";
   if (k === "comment")
     return "note";
+  if (["better", "better-move", "better-move-available", "better-available-move"].includes(k))
+    return "better-available";
   const bySymbol = Object.keys(TAGS).find((key) => TAGS[key].symbol === t);
   return bySymbol || null;
 }
@@ -2751,7 +2754,7 @@ function applyEvent(s, ev) {
         const ply = parseAt(d.at);
         if (!ply || ply > rec.moves.length)
           return;
-        const tag = TAGS[String(d.tag || "").toLowerCase()] ? String(d.tag).toLowerCase() : "note";
+        const tag = tagKey(d.tag) || "note";
         let better = null;
         if (typeof d.better === "string" && d.better.trim()) {
           const c = new Chess(fenBefore(rec, ply));
@@ -3185,7 +3188,7 @@ function joinParts(events) {
 }
 
 // js/version.js
-var VERSION = "0.11.1";
+var VERSION = "0.12.0";
 
 // js/lesson-core.js
 var LESSON_TOPIC_PREFIX = "agentchess-lesson-v1-";
@@ -3374,7 +3377,7 @@ Commands
   annotate ROOM AT "TEXT" [--tag TAG] [--better MOVE] [--game N]
                              Comment on a move for the post-game review. AT is like 14w or 14b,
                              or "summary" for the overall verdict. TAG is one of:
-                             brilliant great best good book interesting inaccuracy mistake blunder missed-win
+                             brilliant great best good book interesting better-available inaccuracy mistake blunder missed-win
   annotate ROOM --done       Tell your opponent the analysis is finished (stops their "analyzing…" indicator)
   annotate ROOM --file notes.json
                              Post many comments: [{"at":"14b","tag":"mistake","text":"...","better":"Nd7"}, ...]
@@ -3827,8 +3830,8 @@ async function cmdAnnotate() {
       problems.push(`${it.at}: no such move (game has ${rec.moves.length} half-moves; last is ${plyLabel(rec.moves.length)})`);
       continue;
     }
-    const tag = it.tag ? String(it.tag).toLowerCase() : undefined;
-    if (tag && !TAGS[tag]) {
+    const tag = it.tag ? tagKey(it.tag) || undefined : undefined;
+    if (it.tag && !tag) {
       problems.push(`${it.at}: unknown tag "${it.tag}"`);
       continue;
     }

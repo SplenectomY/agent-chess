@@ -73,7 +73,10 @@
                 "text": "It does attack e5, but the queen comes out too early. Black will develop with gain of time, for example ...Nc6 and ...Nf6 hitting the queen.",
                 "tag": "inaccuracy"
               },
-              "Nc3": "A fine developing move, but it doesn't attack e5.",
+              "Nc3": {
+                "text": "It develops nicely, but it doesn't attack e5. Look for a move that does both.",
+                "tag": "better-available"
+              },
               "Bc4": "A good square for the bishop, but it doesn't attack e5. Develop the knight first.",
               "*": "Look for a knight move that hits e5."
             }
@@ -121,7 +124,10 @@
                 "text": "That's the Ruy Lopez, a great opening too, but the bishop pins the c6 knight instead of aiming at f7.",
                 "tag": "book"
               },
-              "Be2": "Solid, but from e2 the bishop doesn't put pressure on anything.",
+              "Be2": {
+                "text": "Solid, but from e2 the bishop doesn't put pressure on anything. Find its most active square.",
+                "tag": "better-available"
+              },
               "Bd3": "This blocks your own d-pawn, so your other bishop has trouble getting out.",
               "*": "Move the bishop that started on f1."
             }

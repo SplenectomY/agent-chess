@@ -81,7 +81,7 @@ A lesson can be a pure slideshow (no tasks at all), or mostly practice, or anyth
 | `text` | The explanation (up to 4000 characters). |
 | `fen` | Jump to a new position. Without it, the slide continues from where the previous slide ended: after its moves and after its task. |
 | `moves` | Moves played as the slide opens (SAN or UCI), for example `["e4", "e5", "Nf3"]`. The last one is highlighted on the board and the move list appears above the board. Use one or two moves per slide when you're walking through a line. |
-| `tag` | A symbol on the last of `moves`: `brilliant` !!, `great` !, `best` ★, `good` ✓, `book`, `interesting` !?, `inaccuracy` ?!, `mistake` ?, `blunder` ??, `missed-win`. |
+| `tag` | A symbol on the last of `moves`: `brilliant` !!, `great` !, `best` ★, `good` ✓, `book`, `interesting` !?, `better-available` ↑ (good, but a better move was there), `inaccuracy` ?!, `mistake` ?, `blunder` ??, `missed-win`. On a task's wrong move, `better-available` tells the player their move is good but not the best, and they retry. |
 | `arrows` | Arrows on the board: `"g1f3"`, `"g1-f3"`, a legal move in SAN (`"Nf3"`), or `{ "from": "g1", "to": "f3", "color": "red" }`. Colors: `green` (default), `red`, `blue`, `yellow`. |
 | `highlights` | Colored squares: `"e4"` or `{ "square": "e4", "color": "red" }`, same colors. |
 | `orientation` | Flip the board for this slide only. Usually better left alone. |

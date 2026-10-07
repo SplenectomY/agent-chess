@@ -304,7 +304,7 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 .tag-brilliant { --tag: #1a9d97; } .tag-great { --tag: #4f7fb0; } .tag-best { --tag: #5d9b3c; }
 .tag-good { --tag: #78955e; } .tag-book { --tag: #9a7a55; } .tag-interesting { --tag: #8a6fc2; }
 .tag-inaccuracy { --tag: #c99a13; } .tag-mistake { --tag: #dd7a1f; } .tag-blunder { --tag: #c8372d; }
-.tag-missed-win { --tag: #b0457a; } .tag-note { --tag: #5b6779; }
+.tag-missed-win { --tag: #b0457a; } .tag-better-available { --tag: #3f7fd0; } .tag-note { --tag: #5b6779; }
 .sym { color: var(--tag); font-weight: 800; margin-left: 3px; font-size: .9em; }
 
 .banner-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 12px; align-items: center; }

@@ -9,6 +9,7 @@ import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import * as G from '../js/game.js';
 import { Chess } from '../vendor/chess.js';
 import { DEFAULT_RELAY, topicFor, parseNtfyLine } from '../js/relay.js';
+import { tagKey } from '../js/tags.js';
 import { TAGS, validatePuzzle, toBase64Url, fromBase64Url, splitParts, joinParts, PUZZLE_TOPIC_PREFIX, ID_ALPHABET } from '../js/puzzle-core.js';
 import { VERSION } from '../js/version.js';
 import { validateLesson, LESSON_TOPIC_PREFIX } from '../js/lesson-core.js';
@@ -43,7 +44,7 @@ Commands
   annotate ROOM AT "TEXT" [--tag TAG] [--better MOVE] [--game N]
                              Comment on a move for the post-game review. AT is like 14w or 14b,
                              or "summary" for the overall verdict. TAG is one of:
-                             brilliant great best good book interesting inaccuracy mistake blunder missed-win
+                             brilliant great best good book interesting better-available inaccuracy mistake blunder missed-win
   annotate ROOM --done       Tell your opponent the analysis is finished (stops their "analyzing…" indicator)
   annotate ROOM --file notes.json
                              Post many comments: [{"at":"14b","tag":"mistake","text":"...","better":"Nd7"}, ...]
@@ -436,8 +437,8 @@ async function cmdAnnotate() {
     }
     const ply = G.parseAt(it.at);
     if (!ply || ply > rec.moves.length) { problems.push(`${it.at}: no such move (game has ${rec.moves.length} half-moves; last is ${G.plyLabel(rec.moves.length)})`); continue; }
-    const tag = it.tag ? String(it.tag).toLowerCase() : undefined;
-    if (tag && !G.TAGS[tag]) { problems.push(`${it.at}: unknown tag "${it.tag}"`); continue; }
+    const tag = it.tag ? tagKey(it.tag) || undefined : undefined;
+    if (it.tag && !tag) { problems.push(`${it.at}: unknown tag "${it.tag}"`); continue; }
     if (it.better) {
       const c = new Chess(G.fenBefore(rec, ply));
       if (!G.previewMove({ chess: c }, String(it.better))) problems.push(`${it.at}: better move "${it.better}" isn't legal there (posted without it)`);

@@ -912,7 +912,7 @@ function analysisPrompt() {
     `   node agent-chess.mjs annotate ${R.code} 14b "Nf6 drops the e5 pawn." --tag mistake --better Nd7`,
     `   node agent-chess.mjs annotate ${R.code} summary "Your 2–3 sentence summary."`,
     `   node agent-chess.mjs annotate ${R.code} --done      # tells me you're finished (I see "analyzing…" until then)`,
-    '   Tags: brilliant, great, best, good, book, interesting, inaccuracy, mistake, blunder, missed-win (or leave it out for a plain comment).',
+    '   Tags: brilliant, great, best, good, book, interesting, better-available (good, but a better move was there: add the better move), inaccuracy, mistake, blunder, missed-win (or leave it out for a plain comment).',
     '',
     'Over HTTP: POST one message per comment to the room relay, using your player id:',
     `   curl -s -d '{"type":"annotation","id":"YOUR-ID","game":${g},"at":"14b","tag":"mistake","text":"...","better":"Nd7"}' ${topicUrl}`,

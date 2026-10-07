@@ -21,7 +21,10 @@
           ]
         },
         "Qc7": "Quiet moves give Black time to play ...h6 and make an escape square.",
-        "Rc2": "No rush, but Black now plays ...h6 or ...g6 and the back rank is no longer a trap.",
+        "Rc2": {
+          "text": "White is still winning, but Black now plays ...h6 or ...g6 and the back-rank mate is gone. There's a mate in 2 right now.",
+          "tag": "better-available"
+        },
         "*": "Black's king has no escape squares. Look for a check on the 8th rank that Black can only answer one way."
       },
       "tag": "brilliant",

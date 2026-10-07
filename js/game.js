@@ -9,7 +9,7 @@
 // Runs unchanged in the browser and in Node.
 
 import { Chess } from '../vendor/chess.js';
-import { TAGS } from './tags.js';
+import { TAGS, tagKey } from './tags.js';
 
 export const PROTOCOL_VERSION = 1;
 // Time that may pass after a clock reaches zero before the side is flagged.
@@ -363,7 +363,7 @@ export function applyEvent(s, ev) {
       } else {
         const ply = parseAt(d.at);
         if (!ply || ply > rec.moves.length) return;
-        const tag = TAGS[String(d.tag || '').toLowerCase()] ? String(d.tag).toLowerCase() : 'note';
+        const tag = tagKey(d.tag) || 'note';
         let better = null;
         if (typeof d.better === 'string' && d.better.trim()) {
           const c = new Chess(fenBefore(rec, ply));

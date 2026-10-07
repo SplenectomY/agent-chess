@@ -2,6 +2,12 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.12.0 — 2026-10-07
+
+- Added: a **Better move available** tag (↑, `better-available`) for a move that's good but misses a stronger one. It works in game reviews (pair it with a `better` move to draw the arrow), puzzles and lessons. On a puzzle or lesson task's wrong move, the player sees "Nc3 is a good move, but there's a better one" instead of "Nc3 isn't it", then retries.
+- Tag names are more forgiving everywhere: "Better move available", "best move", "Brilliant" and the symbols themselves (for example "??") are all understood.
+- The examples use it: Rc2 in the back-rank puzzle, and Nc3 and Be2 in the Italian Game lesson.
+
 ## 0.11.1 — 2026-10-07
 
 - Changed: the buttons that move you forward stand out. They're now brand yellow with a slow, soft pulse (a static ring if your system asks for reduced motion).
