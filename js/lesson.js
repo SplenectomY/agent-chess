@@ -10,7 +10,7 @@ import { drawBoard, wireBoardInput, askPromotion, parseTyped } from './board-vie
 import { Solver, renderFeedback, solverButtons, continueButton } from './solver.js';
 import { t, loc, locWith, lang, setLang, chooseLang, onLangChange, wireLangPicker, setContentLang } from './i18n.js';
 import { loadShared, permanentLink } from './share-load.js';
-import { Narrator, canSpeak, autoRead as autoReadOn, setAutoRead, feedbackSpeech } from './narrator.js';
+import { Narrator, canSpeak, autoRead as autoReadOn, setAutoRead, feedbackSpeech, wireVoicePicker } from './narrator.js';
 
 const L = {
   ls: null,
@@ -81,7 +81,7 @@ function movesLabel(slide) {
 }
 
 // ---------- narration ----------
-const narrator = new Narrator(() => renderVoice());
+const narrator = new Narrator(() => renderVoice(), (text) => { $('ls-voice-status').textContent = text; });
 
 // What to read for a slide: its "narration", else its title, text and task prompt.
 function slideSpeech(s) {
@@ -409,6 +409,7 @@ const checked = source ? validateLesson(source) : null;
 // The interface follows the viewer's choice, else the browser, else the lesson's own language.
 await setLang(chooseLang(checked && checked.ok ? checked.lesson.langs : []));
 wireLangPicker();
+wireVoicePicker();
 document.title = `${t('ls.title')} — Agent Chess v${VERSION}`;
 if (loadError) {
   showMissing(loadError.expired ? t('ls.expired') : t('ls.loadFailed'), loadError.expired ? t('load.expiredLesson') : loadError.message || String(loadError));

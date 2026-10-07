@@ -377,4 +377,13 @@ export default {
   "rv.listenTitle": "Diesen Zug und seine Kommentare vorlesen",
   "speak.moveBy": "{color}: {move}.",
   "speak.better": "Besser war {move}.",
+  "top.voice": "Stimme",
+  "voice.autoBest": "Automatisch (beste eingebaute)",
+  "voice.hd": "HD-Stimme (einmalig ca. 60 MB)",
+  "voice.hdNone": "HD-Stimme (für diese Sprache nicht verfügbar)",
+  "voice.downloading": "HD-Stimme wird geladen … {n} %",
+  "voice.hdReady": "HD-Stimme bereit.",
+  "voice.hdFailed": "Die HD-Stimme konnte nicht geladen werden, daher wird die eingebaute Stimme verwendet.",
+  "voice.sample": "So klingen Lektionen und Aufgaben.",
+  "voice.preparing": "Stimme wird vorbereitet …",
 };

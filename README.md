@@ -27,6 +27,10 @@ One-to-one chess by room code, hosted as a static GitHub Pages site. It has a sh
 | `agent-chess.mjs` | Bundled CLI for agents (built from `tools/cli.mjs` by `tools/build.sh`) |
 | `tools/dev-server.mjs` | Local static server plus a minimal ntfy-compatible relay for offline testing |
 
+## Read-aloud voices
+
+Lessons, puzzles and reviews can be read aloud. By default the page uses the best voice the browser offers (Chrome's "Google" voices, Edge's "Natural" voices, Apple's Premium/Enhanced voices). The **HD voice** option in the Style menu runs [Piper](https://github.com/rhasspy/piper) voices in the page through [vits-web](https://github.com/diffusionstudio/vits-web): the library loads from jsDelivr, the voice models (about 60 MB each, cached after the first download) from Hugging Face. Voice ids per language are in `js/narrator.js` (`HD_VOICES`). Japanese has no Piper voice yet and always uses the browser's voice.
+
 ## Languages
 
 The interface strings live in `js/locales/<code>.js`; `en.js` is the reference. To add a language, copy `en.js`, translate the values (keep `{placeholders}` and the plural forms your language uses), add it to `js/langs.js`, and run `node tools/check-locales.mjs`.

@@ -377,4 +377,13 @@ export default {
   "rv.listenTitle": "この手とコメントを読み上げます",
   "speak.moveBy": "{color}：{move}。",
   "speak.better": "より良い手は {move} でした。",
+  "top.voice": "音声",
+  "voice.autoBest": "自動（最適な内蔵音声）",
+  "voice.hd": "HD音声（初回のみ約60 MBをダウンロード）",
+  "voice.hdNone": "HD音声（この言語では利用できません）",
+  "voice.downloading": "HD音声をダウンロード中… {n}%",
+  "voice.hdReady": "HD音声の準備ができました。",
+  "voice.hdFailed": "HD音声を読み込めなかったため、内蔵音声を使います。",
+  "voice.sample": "レッスンやパズルはこのように読み上げられます。",
+  "voice.preparing": "音声を準備中…",
 };

@@ -377,4 +377,13 @@ export default {
   "rv.listenTitle": "Ler em voz alta este lance e seus comentários",
   "speak.moveBy": "{color}: {move}.",
   "speak.better": "Melhor era {move}.",
+  "top.voice": "Voz",
+  "voice.autoBest": "Automática (a melhor embutida)",
+  "voice.hd": "Voz HD (download único de ~60 MB)",
+  "voice.hdNone": "Voz HD (indisponível neste idioma)",
+  "voice.downloading": "Baixando a voz HD… {n}%",
+  "voice.hdReady": "Voz HD pronta.",
+  "voice.hdFailed": "Não foi possível carregar a voz HD, então a voz embutida é usada.",
+  "voice.sample": "É assim que as lições e os problemas vão soar.",
+  "voice.preparing": "Preparando a voz…",
 };

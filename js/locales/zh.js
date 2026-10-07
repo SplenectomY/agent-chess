@@ -377,4 +377,13 @@ export default {
   "rv.listenTitle": "朗读这步棋及其评论",
   "speak.moveBy": "{color}：{move}。",
   "speak.better": "更好的是 {move}。",
+  "top.voice": "语音",
+  "voice.autoBest": "自动（最佳内置语音）",
+  "voice.hd": "高清语音（一次性下载约 60 MB）",
+  "voice.hdNone": "高清语音（此语言不可用）",
+  "voice.downloading": "正在下载高清语音… {n}%",
+  "voice.hdReady": "高清语音已就绪。",
+  "voice.hdFailed": "高清语音无法加载，改用内置语音。",
+  "voice.sample": "课程和谜题听起来就是这样。",
+  "voice.preparing": "正在准备语音…",
 };

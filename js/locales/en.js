@@ -379,4 +379,13 @@ export default {
   "rv.listenTitle": "Read this move and its comments aloud",
   "speak.moveBy": "{color}: {move}.",
   "speak.better": "Better was {move}.",
+  "top.voice": "Voice",
+  "voice.autoBest": "Automatic (best built-in)",
+  "voice.hd": "HD voice (one-time ~60 MB download)",
+  "voice.hdNone": "HD voice (not available in this language)",
+  "voice.downloading": "Downloading the HD voice… {n}%",
+  "voice.hdReady": "HD voice ready.",
+  "voice.hdFailed": "The HD voice couldn't load, so the built-in voice is used.",
+  "voice.sample": "This is how lessons and puzzles will sound.",
+  "voice.preparing": "Preparing the voice…",
 };

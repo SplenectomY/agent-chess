@@ -377,4 +377,13 @@ export default {
   "rv.listenTitle": "Leggi ad alta voce questa mossa e i suoi commenti",
   "speak.moveBy": "{color}: {move}.",
   "speak.better": "Era meglio {move}.",
+  "top.voice": "Voce",
+  "voice.autoBest": "Automatica (la migliore integrata)",
+  "voice.hd": "Voce HD (download unico di ~60 MB)",
+  "voice.hdNone": "Voce HD (non disponibile in questa lingua)",
+  "voice.downloading": "Download della voce HD… {n}%",
+  "voice.hdReady": "Voce HD pronta.",
+  "voice.hdFailed": "Non è stato possibile caricare la voce HD, quindi si usa la voce integrata.",
+  "voice.sample": "Ecco come suoneranno lezioni e problemi.",
+  "voice.preparing": "Preparazione della voce…",
 };

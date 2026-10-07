@@ -216,7 +216,7 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
   padding: 12px; display: grid; gap: 10px; width: 230px; box-shadow: 0 6px 0 color-mix(in srgb, var(--ink) 12%, transparent);
 }
 .style-pop label { display: grid; grid-template-columns: 4rem 1fr; align-items: center; gap: 8px; font-weight: 650; font-size: .92rem; }
-.style-pop select { min-height: 36px; border: 1.5px solid var(--line); background: var(--paper); font: inherit; color: inherit; padding: 0 6px; }
+.style-pop select { max-width: 14rem; min-height: 36px; border: 1.5px solid var(--line); background: var(--paper); font: inherit; color: inherit; padding: 0 6px; }
 .look-preview { display: grid; grid-template-columns: repeat(6, 1fr); border: 1.5px solid var(--ink); }
 .lp-sq { aspect-ratio: 1; background: var(--sq-light); display: grid; place-items: center; container-type: size; }
 .lp-sq.dark { background: var(--sq-dark); }
@@ -439,6 +439,11 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 .ls-listen { min-height: 32px; padding: 4px 10px; font-size: .9rem; }
 .ls-listen.speaking { background: var(--ink); color: var(--paper); }
 .rv-voice { margin: 0 0 10px; }
+.ls-voice { flex-wrap: wrap; }
+.ls-voice-status { font-size: .85rem; color: var(--muted); }
+.ls-voice-status:empty { display: none; }
+.look-voice-note { margin: -4px 0 0; font-size: .82rem; color: var(--muted); max-width: 16rem; }
+.look-voice-note:empty { display: none; }
 .ls-auto { display: inline-flex; align-items: center; gap: 5px; font-size: .88rem; color: var(--muted); cursor: pointer; }
 .ls-nav { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .ls-nav .btn { min-width: 96px; }

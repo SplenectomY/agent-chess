@@ -377,4 +377,13 @@ export default {
   "rv.listenTitle": "Прочитать вслух этот ход и комментарии",
   "speak.moveBy": "{color}: {move}.",
   "speak.better": "Лучше было {move}.",
+  "top.voice": "Голос",
+  "voice.autoBest": "Автоматически (лучший встроенный)",
+  "voice.hd": "HD-голос (однократная загрузка ~60 МБ)",
+  "voice.hdNone": "HD-голос (недоступен для этого языка)",
+  "voice.downloading": "Загрузка HD-голоса… {n}%",
+  "voice.hdReady": "HD-голос готов.",
+  "voice.hdFailed": "HD-голос не загрузился, поэтому используется встроенный голос.",
+  "voice.sample": "Так будут звучать уроки и задачи.",
+  "voice.preparing": "Подготовка голоса…",
 };

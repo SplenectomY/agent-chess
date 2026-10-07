@@ -2,6 +2,12 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.17.0 — 2026-10-07
+
+- Better built-in voices: read-aloud now picks the best voice your browser has (Chrome's online "Google" voices, Edge's "Natural" voices, Apple's Premium/Enhanced voices) instead of the basic offline one, and avoids robotic eSpeak voices.
+- Added: a **Voice** choice in the Style menu: Automatic, **HD voice**, or any specific voice your browser has for the current language. Picking one plays a short sample. The choice applies to lessons, puzzles and reviews.
+- Added: **HD voice**: natural-sounding Piper voices that run inside the page (no account, no server). Each language's voice downloads once (about 60 MB, with progress shown) and is kept by the browser. Available for English, Spanish, French, German, Italian, Portuguese, Russian and Chinese; Japanese keeps the browser voice. Speech starts with the first sentence while the rest is prepared. If the HD voice can't load, the built-in voice takes over with a short notice.
+
 ## 0.16.0 — 2026-10-07
 
 - Added: read-aloud for puzzles and game reviews, with the same **Listen** button and **Read aloud** switch as lessons (one switch for the whole site).

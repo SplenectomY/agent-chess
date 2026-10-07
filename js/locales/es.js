@@ -377,4 +377,13 @@ export default {
   "rv.listenTitle": "Leer en voz alta esta jugada y sus comentarios",
   "speak.moveBy": "{color}: {move}.",
   "speak.better": "Era mejor {move}.",
+  "top.voice": "Voz",
+  "voice.autoBest": "Automática (la mejor integrada)",
+  "voice.hd": "Voz HD (descarga única de ~60 MB)",
+  "voice.hdNone": "Voz HD (no disponible en este idioma)",
+  "voice.downloading": "Descargando la voz HD… {n}%",
+  "voice.hdReady": "Voz HD lista.",
+  "voice.hdFailed": "La voz HD no se pudo cargar, así que se usa la voz integrada.",
+  "voice.sample": "Así sonarán las lecciones y los problemas.",
+  "voice.preparing": "Preparando la voz…",
 };

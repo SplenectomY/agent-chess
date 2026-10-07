@@ -10,7 +10,7 @@ import { drawBoard, wireBoardInput, askPromotion, parseTyped } from './board-vie
 import { Solver, renderFeedback, solverButtons, continueButton } from './solver.js';
 import { t, loc, setLang, chooseLang, onLangChange, wireLangPicker, setContentLang } from './i18n.js';
 import { loadShared, permanentLink } from './share-load.js';
-import { Narrator, voiceControls, feedbackSpeech, autoRead, userActed } from './narrator.js';
+import { Narrator, voiceControls, feedbackSpeech, autoRead, userActed, wireVoicePicker } from './narrator.js';
 import { locWith, lang } from './i18n.js';
 
 const P = {
@@ -203,6 +203,7 @@ const checked = source ? validatePuzzle(source) : null;
 // The interface follows the viewer's choice, else the browser, else the puzzle's own language.
 await setLang(chooseLang(checked && checked.ok ? checked.puzzle.langs : []));
 wireLangPicker();
+wireVoicePicker();
 document.title = `${t('pz.title')} — Agent Chess v${VERSION}`;
 if (loadError) {
   showMissing(loadError.expired ? t('pz.expired') : t('pz.loadFailed'), loadError.expired ? t('load.expiredPuzzle') : loadError.message || String(loadError));

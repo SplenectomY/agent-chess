@@ -6,7 +6,7 @@ import { $, el, store, toast, copy, pieceNode, applyLook, wireStyleMenu } from '
 import { loadOpenings, identify, ecoVolume } from './openings.js';
 import { primerFor } from './opening-primers.js';
 import { animateMove } from './board-view.js';
-import { Narrator, voiceControls, autoRead, userActed } from './narrator.js';
+import { Narrator, voiceControls, autoRead, userActed, wireVoicePicker } from './narrator.js';
 import { t, colorName as cName, timeControl, pieceName, setLang, chooseLang, onLangChange, wireLangPicker, lang } from './i18n.js';
 import { langNameEnglish } from './langs.js';
 
@@ -1406,6 +1406,7 @@ await setLang(chooseLang());
 wireStyleMenu(() => { if (R.s && R.s.room) renderBoard(); });
 wireLangPicker();
 onLangChange(onLanguage);
+wireVoicePicker();
 document.title = appTitle();
 $('app-version').textContent = `v${VERSION}`;
 renderLobbyText();
