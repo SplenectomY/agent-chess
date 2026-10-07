@@ -432,6 +432,13 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 .ls-inline-next { margin: 16px 0 0; }
 
 /* ---------- lesson page ---------- */
+.ls-slide-head { display: flex; align-items: center; justify-content: space-between; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 4px; }
+.ls-slide-head .pz-kicker { margin: 0; }
+.ls-voice { display: flex; align-items: center; gap: 10px; }
+.ls-voice[hidden] { display: none; }
+.ls-listen { min-height: 32px; padding: 4px 10px; font-size: .9rem; }
+.ls-listen.speaking { background: var(--ink); color: var(--paper); }
+.ls-auto { display: inline-flex; align-items: center; gap: 5px; font-size: .88rem; color: var(--muted); cursor: pointer; }
 .ls-nav { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .ls-nav .btn { min-width: 96px; }
 .ls-dots { flex: 1; display: flex; gap: 4px; align-items: center; min-width: 0; }

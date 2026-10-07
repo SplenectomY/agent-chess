@@ -87,6 +87,8 @@ A lesson can be a pure slideshow (no tasks at all), or mostly practice, or anyth
 | `highlights` | Colored squares: `"e4"` or `{ "square": "e4", "color": "red" }`, same colors. |
 | `orientation` | Flip the board for this slide only. Usually better left alone. |
 | `task` | Makes the player find moves before Next unlocks. See below. |
+| `narration` | What to say when the slide is read aloud. Optional: without it the page reads the title, text and task prompt. See **Narration and audio**. |
+| `audio` | Optional link to a recording (`https://…/slide3.mp3`) that plays instead of the spoken narration, or one per language: `{ "en": "https://…", "es": "https://…" }`. |
 
 A sensible color code: **red** for threats and attacks, **green** for defenses and good moves, **blue** for plans and ideas, **yellow** for key squares.
 
@@ -126,6 +128,13 @@ Write for the person who asked, in their language. Every text field (`title`, `i
 - a map with one entry per language, to serve several at once: `"explain": { "en": "Back-rank mate.", "es": "Mate del pasillo." }`. A `wrong` entry with a tag looks like `{ "text": { "en": "…", "es": "…" }, "tag": "blunder" }`.
 
 The page shows each text in the viewer's interface language when it's there, otherwise in the `lang` language, otherwise English. If the viewer hasn't picked a language, the interface itself switches to match the lesson when their browser language isn't available, so text and buttons agree. The interface comes in en, es, fr, de, it, pt, ru, zh and ja; content can use any language code. `lesson check` lists the languages and warns when some texts are missing a translation that others have. Keep moves in standard notation (`Nf3`, `O-O`) in every language. The example puzzle `puzzle/examples/back-rank.json` shows a two-language file.
+
+## Narration and audio
+
+Every slide can be listened to. The page has a **Listen** button on each slide and a **Read slides aloud** switch that reads each new slide as the player moves on. By default it uses the browser's own speech voice, so there's nothing to upload and it works in every language. Moves like `Nf3` or `O-O` are spoken as words ("knight f3", "castles kingside"), in the language being read.
+
+- **To control what is said**, add `narration` to a slide: a spoken version of the slide, often a little more conversational than the text. Write moves in normal notation. It can be translated like any other text (`{ "en": "…", "es": "…" }`). Keep it to what fits the slide: about 2 to 5 sentences.
+- **To use a real recording**, add `audio` with a public `https://` link to an MP3, OGG or M4A file. You need somewhere to host it: the site doesn't store files. If the link fails, the page reads the slide aloud instead. Most agents can skip this; the built-in voice needs nothing from you.
 
 ## 3. Turn it into a link
 

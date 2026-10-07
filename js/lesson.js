@@ -3,13 +3,14 @@
 
 import { Chess } from '../vendor/chess.js';
 import { VERSION } from './version.js';
-import { $, el, copy, wireStyleMenu } from './ui.js';
+import { $, el, copy, wireStyleMenu, store, toast } from './ui.js';
 import { TAGS } from './tags.js';
 import { validateLesson, LESSON_TOPIC_PREFIX } from './lesson-core.js';
 import { drawBoard, wireBoardInput, askPromotion, parseTyped } from './board-view.js';
 import { Solver, renderFeedback, solverButtons, continueButton } from './solver.js';
-import { t, loc, colorName, setLang, chooseLang, onLangChange, wireLangPicker, setContentLang } from './i18n.js';
+import { t, loc, locWith, lang, setLang, chooseLang, onLangChange, wireLangPicker, setContentLang } from './i18n.js';
 import { loadShared, permanentLink } from './share-load.js';
+import { Narrator, canSpeak } from './narrator.js';
 
 const L = {
   ls: null,
@@ -79,6 +80,40 @@ function movesLabel(slide) {
   return parts.join(' ');
 }
 
+// ---------- narration ----------
+const narrator = new Narrator(() => renderVoice());
+let autoRead = !!store.get('agentchess:narrate');
+
+// What to read for a slide: its "narration", else its title, text and task prompt.
+function slideSpeech(s) {
+  if (s.narration) return locWith(s.narration);
+  const parts = [s.title, s.text, s.task && s.task.prompt].filter(Boolean).map(locWith);
+  return { text: parts.map((p) => p.text).join('\n\n'), lang: (parts[0] || {}).lang || lang() };
+}
+const hasVoice = (s) => !!s && (canSpeak() || !!s.audio);
+
+function readSlide() {
+  const s = slide();
+  if (!s || L.finished) return;
+  const speech = slideSpeech(s);
+  const speakIt = () => narrator.speak(speech.text, speech.lang);
+  if (s.audio) {
+    const url = typeof s.audio === 'string' ? s.audio : locWith(s.audio).text;
+    narrator.play(url, () => { if (canSpeak()) { toast(t('ls.audioFailed')); speakIt(); } });
+  } else speakIt();
+}
+
+function renderVoice() {
+  const s = L.ls && slide();
+  const box = $('ls-voice');
+  box.hidden = !hasVoice(s) || L.finished;
+  const btn = $('ls-listen');
+  btn.textContent = narrator.speaking ? t('ls.stopListening') : t('ls.listen');
+  btn.title = t('ls.listenTitle');
+  btn.classList.toggle('speaking', narrator.speaking);
+  $('ls-auto').checked = autoRead;
+}
+
 // ---------- state helpers ----------
 const slide = () => L.ls.slides[L.idx];
 
@@ -116,7 +151,9 @@ function go(i) {
   L.seen = Math.max(L.seen, i);
   const S = solverFor(i);
   if (S) S.sel = null;
+  narrator.stop();
   render();
+  if (autoRead && L.userActed) readSlide();
 }
 
 function next() {
@@ -124,7 +161,7 @@ function next() {
   const S = solverFor(L.idx);
   if (S && !S.solved) return;
   if (L.idx < L.ls.slides.length - 1) go(L.idx + 1);
-  else { L.finished = true; render(); }
+  else { L.finished = true; narrator.stop(); render(); }
 }
 
 function prev() {
@@ -247,6 +284,7 @@ function render() {
     title: `${i + 1}. ${loc(x.title) || t(x.task ? 'ls.dotTask' : 'ls.dot', { i: i + 1 })}`, onclick: () => go(i),
   })));
   renderTextState();
+  renderVoice();
 }
 
 function renderTextState() {
@@ -300,6 +338,15 @@ function wireInput() {
     }
     input.value = '';
     S.play(mv.from + mv.to + (mv.promotion || ''));
+  });
+  // Narration may only start after the player has done something (browser autoplay rules).
+  for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => { L.userActed = true; }, { capture: true });
+  $('ls-listen').addEventListener('click', () => (narrator.speaking ? narrator.stop() : readSlide()));
+  $('ls-auto').addEventListener('change', (e) => {
+    autoRead = e.target.checked;
+    store.set('agentchess:narrate', autoRead);
+    if (autoRead && !narrator.speaking) readSlide();
+    else if (!autoRead) narrator.stop();
   });
   $('ls-next').addEventListener('click', next);
   $('ls-prev').addEventListener('click', prev);
@@ -370,4 +417,5 @@ if (loadError) {
   wireInput();
   go(0);
 }
-onLangChange(() => { if (L.ls) { renderIntro(); render(); } });
+onLangChange(() => { if (L.ls) { narrator.stop(); renderIntro(); render(); } });
+window.addEventListener('pagehide', () => narrator.stop());

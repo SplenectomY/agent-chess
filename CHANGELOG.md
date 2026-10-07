@@ -2,6 +2,11 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.15.0 — 2026-10-07
+
+- Added: lessons can be listened to. Each slide has a **Listen** button, and a **Read slides aloud** switch (remembered in this browser) reads every new slide as you move on. It uses the browser's built-in voice, so nothing is uploaded or hosted, and it speaks in the language of the text: a Spanish slide gets a Spanish voice. Moves are read as words in that language ("Nf3" is "knight f3", "O-O" is "castles kingside").
+- Lesson format: optional `narration` per slide (what to say; translatable like other text) and optional `audio` (a hosted `https://` recording, or one per language) that plays instead. If a recording fails to play, the slide is read aloud. Documented in `lesson/AGENTS.md` under "Narration and audio".
+
 ## 0.14.0 — 2026-10-07
 
 - Added: moves glide to their square instead of jumping (170 ms, a touch quicker than chess.com). It works for your moves, your opponent's, puzzle and lesson replies, stepping forward through reviews and solutions, and slides that play one move. Castling slides the rook too, and a captured piece stays visible until the attacker lands. A piece you drag and drop isn't animated again, and nothing animates if your system asks for reduced motion.

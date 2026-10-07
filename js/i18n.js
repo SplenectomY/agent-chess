@@ -58,6 +58,16 @@ export function colorName(c) {
 
 export const pieceName = (type) => t(`piece.${type}`);
 
+// The same as t(), but in a given language if its catalog is loaded (else English). Used to
+// read chess moves aloud in the language of the text being read.
+export function tFor(code, key, vars = {}) {
+  const c = catalogs[code] || en;
+  let v = c[key] ?? en[key];
+  if (v == null) return key;
+  if (typeof v === 'object') v = v.other ?? Object.values(v)[0];
+  return fill(String(v), vars);
+}
+
 // "5 min + 3 s per move" / "Untimed" for a time control in ms ({ initial, increment }).
 export function timeControl(tc) {
   if (!tc) return t('tc.untimed');
@@ -167,6 +177,15 @@ export function wireLangPicker() {
 // language: exact, then the content's main language, then English, then anything.
 let contentMain = 'en';
 export const setContentLang = (code) => { contentMain = baseLang(code) || 'en'; };
+// loc() plus the language the chosen text is in: { text, lang }.
+export function locWith(v) {
+  if (v == null) return { text: '', lang: contentMain };
+  if (typeof v === 'string') return { text: v, lang: contentMain };
+  for (const code of [current, contentMain, 'en']) if (v[code] != null) return { text: v[code], lang: code };
+  const [code, text] = Object.entries(v)[0] || [contentMain, ''];
+  return { text, lang: code };
+}
+
 export function loc(v) {
   if (v == null) return '';
   if (typeof v === 'string') return v;

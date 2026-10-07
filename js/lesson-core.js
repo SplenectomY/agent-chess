@@ -63,6 +63,20 @@ export function validateLesson(input) {
     const where = `slides[${i}]`;
     const s = raw && typeof raw === 'object' ? raw : { text: String(raw ?? '') };
     const out = { title: str(s.title, 120), text: str(s.text, 4000) };
+    // Narration: read aloud by the browser (text, any language). Audio: a hosted recording
+    // (http/https URL, or one per language) that plays instead of the spoken narration.
+    const narration = str(s.narration, 4000);
+    if (narration) out.narration = narration;
+    if (s.audio != null && s.audio !== '') {
+      const urls = typeof s.audio === 'string' ? { _: s.audio } : s.audio && typeof s.audio === 'object' ? s.audio : {};
+      const ok = {};
+      for (const [k, u] of Object.entries(urls)) {
+        const url = String(u || '').trim();
+        if (/^https?:\/\/\S+$/i.test(url) && url.length <= 2000) ok[k] = url;
+        else warnings.push(`${where}: audio ${JSON.stringify(u)} isn't an http(s) link, so it's left out (the slide is read aloud instead).`);
+      }
+      if (Object.keys(ok).length) out.audio = ok._ && Object.keys(ok).length === 1 ? ok._ : Object.fromEntries(Object.entries(ok).filter(([k]) => k !== '_'));
+    }
     if (s.fen) {
       try { chess = loadFen(s.fen); } catch (e) { errors.push(`${where}: "fen" isn't a valid position: ${e.message}`); }
     }
