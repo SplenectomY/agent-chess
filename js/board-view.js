@@ -30,7 +30,7 @@ function ensureMarkers(svg) {
 // opts: { board, arrowsG, chess, flip, last, lastClass ('last'|'wrong'), sel, legal (verbose moves),
 //         movableColor, badge {sq, tag}, arrows [{from,to,color}], highlights [{sq,color}] }
 export function drawBoard(opts) {
-  const { board, arrowsG, chess, flip = false, last = null, lastClass = 'last', sel = null, legal = [],
+  const { board, arrowsG, chess, flip = false, last = null, animate = true, lastClass = 'last', sel = null, legal = [],
     movableColor = null, badge = null, arrows = [], highlights = [] } = opts;
   let checkSq = null;
   if (chess.inCheck()) {
@@ -61,7 +61,11 @@ export function drawBoard(opts) {
       squares.push(node);
     }
   }
+  const prevFen = board.dataset.fen;
   board.replaceChildren(...squares);
+  board.dataset.fen = chess.fen();
+  if (animate) animateMove(board, prevFen, chess.fen(), last);
+  else delete board.dataset.noAnim;
 
   ensureMarkers(arrowsG.ownerSVGElement);
   const xy = (sq) => {
@@ -83,6 +87,83 @@ export function drawBoard(opts) {
     for (const [k, v] of Object.entries(attrs)) line.setAttribute(k, v);
     return line;
   }));
+}
+
+// ---------- move animation ----------
+// Pieces glide to their new square instead of jumping. Slightly quicker than chess.com's
+// default so it never feels like it's holding the game up.
+export const MOVE_MS = 170;
+const placement = (fen) => String(fen || '').split(' ')[0];
+
+// After the board was redrawn from prevFen to newFen: if the change is exactly the move
+// `last` ({ from, to }), slide the moved piece (and the rook, when castling) from its old
+// square, and let a captured piece fade out underneath. Anything else (jumps of several
+// moves, undo, the first draw, a piece the player just dragged) is shown as is.
+export function animateMove(board, prevFen, newFen, last) {
+  const dragged = board.dataset.noAnim;
+  delete board.dataset.noAnim;
+  // Redrawn mid-slide with the same position (a status update, the relay's echo): carry on
+  // from where the previous drawing was, instead of snapping to the end.
+  const running = board._anim;
+  if (running && prevFen && placement(prevFen) === placement(newFen)) {
+    const elapsed = performance.now() - running.start;
+    if (running.fen === placement(newFen) && elapsed < MOVE_MS) play(board, running, elapsed);
+    return;
+  }
+  board._anim = null;
+  if (!prevFen || !last || !last.from || !last.to || placement(prevFen) === placement(newFen)) return;
+  if (dragged === last.to) return;
+  if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  let before;
+  let mv;
+  try {
+    before = new Chess(prevFen);
+    const probe = new Chess(prevFen);
+    const cands = probe.moves({ square: last.from, verbose: true }).filter((m) => m.to === last.to);
+    mv = cands.find((m) => {
+      const c = new Chess(prevFen);
+      c.move(m);
+      return placement(c.fen()) === placement(newFen);
+    });
+  } catch { return; }
+  if (!mv) return;
+  const slides = [[mv.from, mv.to]];
+  if (mv.flags.includes('k') || mv.flags.includes('q')) {
+    const rank = mv.from[1];
+    slides.push(mv.flags.includes('k') ? [`h${rank}`, `f${rank}`] : [`a${rank}`, `d${rank}`]);
+  }
+  const capSq = mv.flags.includes('e') ? mv.to[0] + mv.from[1] : mv.to;
+  const victim = mv.captured ? before.get(capSq) : null;
+  board._anim = { fen: placement(newFen), start: performance.now(), slides, capSq, victim };
+  play(board, board._anim, 0);
+}
+
+function play(board, spec, elapsed) {
+  const at = (sq) => board.querySelector(`[data-sq="${sq}"]`);
+  for (const [from, to] of spec.slides) {
+    const a = at(from);
+    const b = at(to);
+    const piece = b && b.querySelector('.piece');
+    if (!a || !b || !piece) continue;
+    const ra = a.getBoundingClientRect();
+    const rb = b.getBoundingClientRect();
+    const dx = ra.left - rb.left;
+    const dy = ra.top - rb.top;
+    b.style.zIndex = '8';
+    const anim = piece.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }],
+      { duration: MOVE_MS, easing: 'cubic-bezier(.25,.75,.35,1)' });
+    anim.currentTime = elapsed;
+    anim.onfinish = anim.oncancel = () => { b.style.zIndex = ''; };
+  }
+  // The captured piece stays visible until the attacker lands on it.
+  const capEl = spec.victim && at(spec.capSq);
+  if (capEl) {
+    const ghost = pieceNode(spec.victim.color, spec.victim.type, 'piece cap-ghost');
+    capEl.prepend(ghost);
+    const fade = ghost.animate([{ opacity: 1 }, { opacity: 1, offset: 0.7 }, { opacity: 0 }], { duration: MOVE_MS, easing: 'linear' });
+    fade.currentTime = elapsed;
+    fade.onfinish = fade.oncancel = () => ghost.remove();
+  }
 }
 
 function squareFromPoint(x, y) {
@@ -143,7 +224,10 @@ export function wireBoardInput(board, hooks) {
     d.ghost.remove();
     if (d.moved) {
       const over = squareFromPoint(e.clientX, e.clientY);
+      // A dragged piece is already where it lands: don't slide it in again.
+      if (over) board.dataset.noAnim = over;
       if (over && over !== d.from && hooks.attempt(d.from, over)) return;
+      delete board.dataset.noAnim;
       hooks.redraw();
     }
   });

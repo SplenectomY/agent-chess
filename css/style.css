@@ -279,6 +279,7 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 }
 .drag-ghost > span { grid-area: 1 / 1; }
 .sq.dragging .piece { opacity: .25; }
+.piece.cap-ghost { position: absolute; z-index: 0; }
 
 .promo {
   position: absolute; inset: 0; background: color-mix(in srgb, var(--paper) 70%, transparent);

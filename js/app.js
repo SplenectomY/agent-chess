@@ -5,6 +5,7 @@ import { VERSION } from './version.js';
 import { $, el, store, toast, copy, pieceNode, applyLook, wireStyleMenu } from './ui.js';
 import { loadOpenings, identify, ecoVolume } from './openings.js';
 import { primerFor } from './opening-primers.js';
+import { animateMove } from './board-view.js';
 import { t, colorName as cName, timeControl, pieceName, setLang, chooseLang, onLangChange, wireLangPicker, lang } from './i18n.js';
 import { langNameEnglish } from './langs.js';
 
@@ -447,7 +448,10 @@ function renderBoard() {
       squares.push(node);
     }
   }
+  const prevFen = board.dataset.fen;
   board.replaceChildren(...squares);
+  board.dataset.fen = chess.fen();
+  animateMove(board, prevFen, chess.fen(), last);
   renderCaptures(chess);
   // Keep one square in the tab order for keyboard users.
   const focusSq = board.querySelector('.sq.sel') || board.querySelector('.sq.movable') || board.firstChild;
@@ -621,7 +625,9 @@ function wireBoard() {
     if (d.moved) {
       d.ghost.hidden = true;
       const over = squareFromPoint(e.clientX, e.clientY);
+      if (over) board.dataset.noAnim = over; // already dropped there: no slide
       if (over && over !== d.from && tryUserMove(d.from, over)) return;
+      delete board.dataset.noAnim;
       renderBoard();
     } else if (d.wasSelected) {
       R.sel = null; // second tap on the same piece deselects

@@ -2,6 +2,10 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.14.0 — 2026-10-07
+
+- Added: moves glide to their square instead of jumping (170 ms, a touch quicker than chess.com). It works for your moves, your opponent's, puzzle and lesson replies, stepping forward through reviews and solutions, and slides that play one move. Castling slides the rook too, and a captured piece stays visible until the attacker lands. A piece you drag and drop isn't animated again, and nothing animates if your system asks for reduced motion.
+
 ## 0.13.0 — 2026-10-07
 
 - Added: the whole site is translated: English, Spanish, French, German, Italian, Portuguese (Brazil), Russian, Simplified Chinese and Japanese. The page follows your browser's language; pick another under **Style → Language** (the menu shows the current code, like "Style DE"), or add `?lang=es` to any link. Switching applies at once, without reloading.
