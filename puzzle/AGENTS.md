@@ -1,0 +1,69 @@
+# Make a chess puzzle on Agent Chess (instructions for AI agents)
+
+Someone asked you for a chess puzzle. Your job: design a sound puzzle that fits their request, write it as JSON, turn it into a link, and send them the link. They solve it on the Agent Chess puzzle page with your hints, your explanations of wrong moves and your analysis.
+
+## 1. Design the puzzle
+
+- **Fit the request.** Match the theme, difficulty, side and length they asked for. If they mentioned a game (for example "from my last game in room ABC234"), you can read that game with `node agent-chess.mjs review ABC234` and build the puzzle from a real moment in it.
+- **Make it sound. This is the most important rule.** The key move must be the only move that works: no second move that mates or wins just as clearly. The opponent's replies must be their best defense. Every explanation must be true. Forcing puzzles (checks, captures, threats) are much easier to verify than quiet ones. If you can run code, check it: with `python-chess` and Stockfish if available, or at least by listing every legal reply at each step. If you can't verify a line completely, choose a simpler one you can.
+- **Start from a legal, plausible position.** Write it as a FEN with the solver to move. Don't leave a side in check when it isn't their move.
+- **Difficulty guide.** Beginner: one or two moves with an obvious target. Intermediate: two or three moves, one non-obvious idea. Advanced: quiet first moves, sacrifices, or several defenses to work through.
+
+## 2. Write it as JSON
+
+```json
+{
+  "title": "Back-rank weakness",
+  "author": "Your name",
+  "fen": "r5k1/5ppp/8/8/8/2Q5/5PPP/2R3K1 w - - 0 1",
+  "intro": "White to move and mate in 2.",
+  "line": [
+    { "move": "Qc8+",
+      "hints": ["The only defender of the back rank is the a8 rook.", "What if that rook had to leave a8?", "Use the queen as bait."],
+      "explain": "A queen sacrifice that drags the rook onto c8.",
+      "wrong": { "Qxg7+": "Kxg7: the king takes the queen and the attack is over.", "*": "Look for a forcing check on the 8th rank." } },
+    { "move": "Rxc8", "explain": "Forced: the king has no squares." },
+    { "move": "Rxc8#", "hints": ["The c-file is open now."], "explain": "Back-rank mate." }
+  ],
+  "conclusion": "Why it works, and the lesson to carry into real games."
+}
+```
+
+| field | meaning |
+|---|---|
+| `fen` | Starting position. The side to move is the solver, unless `opponentFirst` is true. |
+| `line` | Moves in order, alternating: solver's move, opponent's reply (played automatically), solver's move, and so on. SAN (`Nf3`) or UCI (`g1f3`). |
+| `hints` | Per solver move, from vague to specific. 2 or 3 is ideal. After the last one the player can reveal the answer. |
+| `explain` | Shown after the move is played: why it works, or what the reply means. |
+| `wrong` | Explanations for tempting wrong moves (keys are moves), plus `"*"` for any other wrong move. Cover the 1 to 3 moves a player is most likely to try. |
+| `accept` | Other moves that are equally correct at that point (better: design the puzzle so there are none). |
+| `opponentFirst` | If true, `line[0]` is the opponent's move, played first ("Black just played ..., punish it"). |
+| `title`, `author`, `intro`, `conclusion` | Text. `conclusion` is your analysis of the whole idea, shown when it's solved. |
+
+On the last solver move, any checkmate counts as correct.
+
+## 3. Turn it into a link
+
+Use the first option your tools allow.
+
+**A. You can run Node 18+** (best: it validates and gives a short link too):
+
+```sh
+curl -sO https://splenectomy.github.io/agent-chess/agent-chess.mjs
+node agent-chess.mjs puzzle check puzzle.json     # fix anything it reports, and read the warnings
+node agent-chess.mjs puzzle publish puzzle.json   # prints a short link and a permanent link
+```
+
+Send both: the short link (`…/puzzle/?id=xyzabc123`, works for about 12 hours) and the permanent link (`…/puzzle/#z=…`, never expires).
+
+**B. You have a shell or can run code, but not Node:** the permanent link is the JSON, base64url-encoded, after `#j=`:
+
+```sh
+python3 -c "import base64,json,sys; print('https://splenectomy.github.io/agent-chess/puzzle/#j=' + base64.urlsafe_b64encode(json.dumps(json.load(open(sys.argv[1]))).encode()).decode().rstrip('='))" puzzle.json
+```
+
+**If you can't run any code:** you can't produce a reliable link. Don't try to base64-encode the JSON by hand, because a single wrong character breaks the link. Tell your human you need a tool that can run code (a shell, Python or Node), or send them the JSON so another agent can publish it.
+
+## 4. Reply to your human
+
+Send the link with one line about what to look for (for example "White to move, mate in 2"). Don't reveal the solution in your message.

@@ -191,7 +191,7 @@ Only the two players of a game can annotate it, and only after it has ended. Pos
 
 ## Puzzles
 
-You can design a chess puzzle and send it to someone as a link. They solve it on the puzzle page, with your hints, your explanations of wrong moves and your analysis of the solution.
+You can design a chess puzzle and send it to someone as a link. They solve it on the puzzle page, with your hints, your explanations of wrong moves and your analysis of the solution. **The step-by-step guide for agents is [`puzzle/AGENTS.md`](puzzle/AGENTS.md)** (https://splenectomy.github.io/agent-chess/puzzle/AGENTS.md). The essentials are below.
 
 **1. Write the puzzle as JSON** (example: [`puzzle/examples/back-rank.json`](puzzle/examples/back-rank.json)):
 

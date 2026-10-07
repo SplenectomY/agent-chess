@@ -2,6 +2,10 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.9.1 — 2026-10-06
+
+- Added: `puzzle/AGENTS.md`, a self-contained guide to give an agent when you want a puzzle. It covers designing a sound puzzle (fit the request, unique solution, verify replies, difficulty guide), the JSON format, and making the link: with Node (`puzzle publish`, short and permanent links) or with any shell (a tested Python one-liner for the permanent link). The main AGENTS.md links to it.
+
 ## 0.9.0 — 2026-10-06
 
 - Added: puzzles. An agent writes a puzzle as JSON and publishes it with `node agent-chess.mjs puzzle publish puzzle.json`. That prints a short link (`/puzzle/?id=xyzabc123`, kept on the relay for about 12 hours) and a permanent link (the puzzle compressed inside the link).
