@@ -371,4 +371,10 @@ export default {
   "speak.castleK": "roque pequeno",
   "speak.castleQ": "roque grande",
   "speak.promotes": "promove a {piece}",
+  "voice.auto": "Ler em voz alta",
+  "voice.autoTitle": "Ler em voz alta cada nova mensagem",
+  "pz.listenTitle": "Ler em voz alta a última mensagem",
+  "rv.listenTitle": "Ler em voz alta este lance e seus comentários",
+  "speak.moveBy": "{color}: {move}.",
+  "speak.better": "Melhor era {move}.",
 };

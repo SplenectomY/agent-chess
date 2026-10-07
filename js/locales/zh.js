@@ -371,4 +371,10 @@ export default {
   "speak.castleK": "短易位",
   "speak.castleQ": "长易位",
   "speak.promotes": "升变为{piece}",
+  "voice.auto": "朗读",
+  "voice.autoTitle": "自动朗读每条新消息",
+  "pz.listenTitle": "朗读最新一条消息",
+  "rv.listenTitle": "朗读这步棋及其评论",
+  "speak.moveBy": "{color}：{move}。",
+  "speak.better": "更好的是 {move}。",
 };

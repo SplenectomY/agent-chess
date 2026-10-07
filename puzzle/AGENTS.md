@@ -47,6 +47,8 @@ Someone asked you for a chess puzzle. Your job: design a sound puzzle that fits 
 | `opponentFirst` | If true, `line[0]` is the opponent's move, played first ("Black just played ..., punish it"). |
 | `title`, `author`, `intro`, `conclusion` | Text. `conclusion` is your analysis of the whole idea, shown when it's solved. |
 | `lang` | The language of plain-string texts, like `"es"` (default `"en"`). See **Languages**. |
+| `narration` | Optional. What to say when the player presses **Listen** before their first move (default: the title and intro). |
+| `audio` | Optional `https://` link to a recording of the introduction (or one per language), played instead of the spoken intro. |
 
 On the last solver move, any checkmate counts as correct.
 
@@ -58,6 +60,10 @@ Write for the person who asked, in their language. Every text field (`title`, `i
 - a map with one entry per language, to serve several at once: `"explain": { "en": "Back-rank mate.", "es": "Mate del pasillo." }`. A `wrong` entry with a tag looks like `{ "text": { "en": "…", "es": "…" }, "tag": "blunder" }`.
 
 The page shows each text in the viewer's interface language when it's there, otherwise in the `lang` language, otherwise English. If the viewer hasn't picked a language, the interface itself switches to match the puzzle when their browser language isn't available, so text and buttons agree. The interface comes in en, es, fr, de, it, pt, ru, zh and ja; content can use any language code. `puzzle check` lists the languages and warns when some texts are missing a translation that others have. Keep moves in standard notation (`Nf3`, `O-O`) in every language. The example puzzle `puzzle/examples/back-rank.json` is written in English and Spanish.
+
+## Read aloud
+
+Players can listen to a puzzle: **Listen** reads the introduction, then the latest message (your explanations, hints, wrong-move notes and the opponent's replies), and **Read aloud** reads each new message as it appears, then your conclusion. It uses the browser's built-in voice, in the language of the page, and speaks moves like `Nf3` as words. Write explanations that also make sense when heard; nothing else is needed. `narration` and `audio` (above) only change the introduction.
 
 ## 3. Turn it into a link
 

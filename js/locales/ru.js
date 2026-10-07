@@ -371,4 +371,10 @@ export default {
   "speak.castleK": "короткая рокировка",
   "speak.castleQ": "длинная рокировка",
   "speak.promotes": "превращается в: {piece}",
+  "voice.auto": "Читать вслух",
+  "voice.autoTitle": "Читать вслух каждое новое сообщение",
+  "pz.listenTitle": "Прочитать вслух последнее сообщение",
+  "rv.listenTitle": "Прочитать вслух этот ход и комментарии",
+  "speak.moveBy": "{color}: {move}.",
+  "speak.better": "Лучше было {move}.",
 };

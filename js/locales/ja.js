@@ -371,4 +371,10 @@ export default {
   "speak.castleK": "キングサイドにキャスリング",
   "speak.castleQ": "クイーンサイドにキャスリング",
   "speak.promotes": "{piece}に昇格",
+  "voice.auto": "読み上げ",
+  "voice.autoTitle": "新しいメッセージを順に読み上げます",
+  "pz.listenTitle": "最新のメッセージを読み上げます",
+  "rv.listenTitle": "この手とコメントを読み上げます",
+  "speak.moveBy": "{color}：{move}。",
+  "speak.better": "より良い手は {move} でした。",
 };

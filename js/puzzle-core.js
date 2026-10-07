@@ -78,6 +78,22 @@ export function textIn(v, code = 'en', main = 'en') {
   return v[code] ?? v[main] ?? v.en ?? Object.values(v)[0] ?? '';
 }
 
+// "audio": an http(s) link to a recording, or { "en": link, "es": link }. Returns the
+// cleaned value or undefined; bad links become warnings.
+export function audioField(v, where, warnings) {
+  if (v == null || v === '') return undefined;
+  const urls = typeof v === 'string' ? { _: v } : typeof v === 'object' ? v : {};
+  const ok = {};
+  for (const [k, u] of Object.entries(urls)) {
+    const url = String(u || '').trim();
+    if (/^https?:\/\/\S+$/i.test(url) && url.length <= 2000) ok[k === '_' ? k : baseLang(k) || k] = url;
+    else warnings.push(`${where}: audio ${JSON.stringify(u)} isn't an http(s) link, so it's left out (the text is read aloud instead).`);
+  }
+  if (!Object.keys(ok).length) return undefined;
+  if (ok._) return ok._;
+  return ok;
+}
+
 export function beginLangs() { langStats = { maps: 0, per: {} }; }
 
 // Finish counting: returns { lang, langs } and pushes warnings for incomplete translations.
@@ -235,6 +251,8 @@ export function validatePuzzle(input) {
   const author = str(p.author, 60);
   const intro = str(p.intro);
   const conclusion = str(p.conclusion, 4000);
+  const narration = str(p.narration, 4000);
+  const audio = audioField(p.audio, 'audio', warnings);
   const { lang, langs } = endLangs(p.lang, title || intro, warnings);
   const puzzle = errors.length ? null : {
     v: PUZZLE_VERSION,
@@ -248,6 +266,8 @@ export function validatePuzzle(input) {
     solverColor,
     line: steps,
     conclusion,
+    ...(narration ? { narration } : {}),
+    ...(audio ? { audio } : {}),
   };
   return { ok: !errors.length, errors, warnings, puzzle };
 }

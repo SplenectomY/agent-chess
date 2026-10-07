@@ -20,8 +20,9 @@ const UCI = /^([a-h][1-8])([a-h][1-8])([qrbn])?$/;
 export class Solver {
   // fen: start; line: validated steps; opponentFirst: line[0] is auto-played first;
   // onChange(): called whenever the state changes (re-render).
-  constructor({ fen, line, solverColor, opponentFirst = false, onChange = () => {} }) {
-    Object.assign(this, { fen, line, solverColor, opponentFirst, onChange: () => {} });
+  // onFeedback(item): called for each new feedback message (used to read it aloud).
+  constructor({ fen, line, solverColor, opponentFirst = false, onChange = () => {}, onFeedback = () => {} }) {
+    Object.assign(this, { fen, line, solverColor, opponentFirst, onChange: () => {}, onFeedback });
     this.restart(true);
     this.onChange = onChange; // only after setup, so the caller can finish storing this solver
   }
@@ -35,6 +36,11 @@ export class Solver {
     clearTimeout(this.timer);
     if (this.opponentFirst) this.advance();
     if (!silent) this.onChange();
+  }
+
+  note(item) {
+    this.feedback.push(item);
+    this.onFeedback(item);
   }
 
   get started() { return this.step > (this.opponentFirst ? 1 : 0) || !!this.wrongChess || !!this.arrow || this.mistakes > 0; }
@@ -93,9 +99,9 @@ export class Solver {
       this.badge = step.tag && mv.san === step.move ? { sq: mv.to, tag: step.tag } : null;
       this.replyArrows = step.replies || [];
       const san = mv.san;
-      this.feedback.push({ kind: 'good', tag: this.badge && step.tag, msg: sp(() => t('sv.correct', { san }),
+      this.note({ kind: 'good', tag: this.badge && step.tag, msg: sp(() => t('sv.correct', { san }),
         san !== step.move ? () => t('sv.alsoWorks', { move: step.move }) : null, () => loc(step.explain)) });
-      if (step.replies) this.feedback.push({ kind: 'reply', msg: () => this.repliesText(step.replies) });
+      if (step.replies) this.note({ kind: 'reply', msg: () => this.repliesText(step.replies) });
       this.step++;
       if (step.replies && this.step < this.line.length) {
         this.paused = true; // let the player study the arrows; Continue plays the reply
@@ -111,7 +117,7 @@ export class Solver {
       const w = wrongEntry(step, mv.san) || {};
       this.wrongInfo = { tag: w.tag, replies: w.replies };
       const san = mv.san;
-      this.feedback.push({ kind: 'bad', tag: w.tag, msg: sp(() => t(w.tag === 'better-available' ? 'sv.goodNotBest' : 'sv.notIt', { san }),
+      this.note({ kind: 'bad', tag: w.tag, msg: sp(() => t(w.tag === 'better-available' ? 'sv.goodNotBest' : 'sv.notIt', { san }),
         () => loc(w.text), w.replies ? () => this.repliesText(w.replies) : null, () => t('sv.retryPrompt')) });
     }
     this.onChange();
@@ -138,7 +144,7 @@ export class Solver {
       this.replyArrows = [];
       const color = mv.color;
       const san = mv.san;
-      this.feedback.push({ kind: 'reply', tag: next.tag, msg: sp(() => t('sv.opponentReplies', { color, san }), () => loc(next.explain)) });
+      this.note({ kind: 'reply', tag: next.tag, msg: sp(() => t('sv.opponentReplies', { color, san }), () => loc(next.explain)) });
       this.step++;
       this.busy = false;
       this.advance();
@@ -156,11 +162,11 @@ export class Solver {
       this.hintsUsed++;
       const h = hints[shown];
       const total = hints.length;
-      this.feedback.push({ kind: 'hint', msg: () => (total > 1 ? t('sv.hintOf', { i: shown + 1, n: total, text: loc(h) }) : t('sv.hintOne', { text: loc(h) })) });
+      this.note({ kind: 'hint', msg: () => (total > 1 ? t('sv.hintOf', { i: shown + 1, n: total, text: loc(h) }) : t('sv.hintOne', { text: loc(h) })) });
     } else if (!this.revealed[i]) {
       this.revealed[i] = true;
       this.arrow = { from: step.from, to: step.to };
-      this.feedback.push({ kind: 'hint', msg: () => t('sv.answer', { move: step.move }) });
+      this.note({ kind: 'hint', msg: () => t('sv.answer', { move: step.move }) });
     }
     this.onChange();
   }

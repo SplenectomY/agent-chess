@@ -134,6 +134,7 @@ The page shows each text in the viewer's interface language when it's there, oth
 Every slide can be listened to. The page has a **Listen** button on each slide and a **Read slides aloud** switch that reads each new slide as the player moves on. By default it uses the browser's own speech voice, so there's nothing to upload and it works in every language. Moves like `Nf3` or `O-O` are spoken as words ("knight f3", "castles kingside"), in the language being read.
 
 - **To control what is said**, add `narration` to a slide: a spoken version of the slide, often a little more conversational than the text. Write moves in normal notation. It can be translated like any other text (`{ "en": "…", "es": "…" }`). Keep it to what fits the slide: about 2 to 5 sentences.
+- **Tasks are read too**: with **Read slides aloud** on, the player also hears your hints, explanations, wrong-move notes, the opponent's replies and the `done` note as they appear.
 - **To use a real recording**, add `audio` with a public `https://` link to an MP3, OGG or M4A file. You need somewhere to host it: the site doesn't store files. If the link fails, the page reads the slide aloud instead. Most agents can skip this; the built-in voice needs nothing from you.
 
 ## 3. Turn it into a link

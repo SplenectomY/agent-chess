@@ -2,7 +2,20 @@
 // language), or plays a hosted recording when a slide has one. Chess moves are spoken as
 // words ("Nf3" -> "knight f3", "O-O" -> "castles kingside") in the language being read.
 
-import { tFor } from './i18n.js';
+import { tFor, t, lang } from './i18n.js';
+import { el, store } from './ui.js';
+
+// One switch for the whole site: lessons, puzzles and reviews.
+const AUTO_KEY = 'agentchess:narrate';
+export const autoRead = () => !!store.get(AUTO_KEY);
+export const setAutoRead = (on) => store.set(AUTO_KEY, !!on);
+
+// Browsers only allow sound after the person has interacted with the page.
+let acted = false;
+if (typeof document !== 'undefined' && document.addEventListener) {
+  for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => { acted = true; }, { capture: true });
+}
+export const userActed = () => acted;
 
 export const canSpeak = () => typeof window !== 'undefined' && 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
 
@@ -68,10 +81,12 @@ export class Narrator {
     this.speaking = false;
     this.audio = null;
     this.token = 0;
+    this.pending = 0;
   }
 
   stop() {
     this.token++;
+    this.pending = 0;
     if (canSpeak()) speechSynthesis.cancel();
     if (this.audio) { this.audio.pause(); this.audio = null; }
     this.set(false);
@@ -81,22 +96,28 @@ export class Narrator {
     if (this.speaking !== on) { this.speaking = on; this.onState(on); }
   }
 
-  // Read `text` (in language `code`).
-  speak(text, code) {
-    this.stop();
+  // Read `text` (in language `code`). queue: add it after whatever is being read now
+  // (for feedback that arrives while the previous message is still being spoken).
+  speak(text, code = lang(), { queue = false } = {}) {
+    if (!queue || this.audio) this.stop();
     if (!canSpeak()) return false;
     const pieces = chunks(plainText(sayMoves(text, code)));
     if (!pieces.length) return false;
     const token = this.token;
     const voice = voiceFor(code);
-    pieces.forEach((piece, i) => {
+    for (const piece of pieces) {
       const u = new SpeechSynthesisUtterance(piece);
       u.lang = voice ? voice.lang : code;
       if (voice) u.voice = voice;
       u.rate = 1;
-      if (i === pieces.length - 1) u.onend = u.onerror = () => { if (token === this.token) this.set(false); };
+      this.pending++;
+      u.onend = u.onerror = () => {
+        if (token !== this.token) return;
+        this.pending = Math.max(0, this.pending - 1);
+        if (!this.pending) this.set(false);
+      };
       speechSynthesis.speak(u);
-    });
+    }
     this.set(true);
     return true;
   }
@@ -112,4 +133,34 @@ export class Narrator {
     a.play().then(() => { if (token === this.token) this.set(true); }).catch(() => { if (token === this.token) { this.audio = null; fallback(); } });
     this.set(true);
   }
+}
+
+// Spoken form of a puzzle/lesson feedback message: its tag, then the message.
+export function feedbackSpeech(f) {
+  const msg = f.msg ? f.msg() : f.text || '';
+  return f.tag ? `${t(`tag.${f.tag}`)}. ${msg}` : msg;
+}
+
+// Listen button + "read aloud" switch, for pages that build their panels in code.
+// readNow() reads whatever is current. Returns { el, refresh }.
+export function voiceControls(narrator, readNow, { title = '' } = {}) {
+  const btn = el('button', { class: 'btn ls-listen', type: 'button', onclick: () => (narrator.speaking ? narrator.stop() : readNow()) });
+  const box = el('input', { type: 'checkbox' });
+  const label = el('span');
+  box.addEventListener('change', () => {
+    setAutoRead(box.checked);
+    if (box.checked) { if (!narrator.speaking) readNow(); } else narrator.stop();
+  });
+  const wrap = el('div', { class: 'ls-voice' }, btn, el('label', { class: 'ls-auto' }, box, ' ', label));
+  const refresh = () => {
+    btn.textContent = narrator.speaking ? t('ls.stopListening') : t('ls.listen');
+    btn.title = title ? t(title) : '';
+    btn.classList.toggle('speaking', narrator.speaking);
+    box.checked = autoRead();
+    label.textContent = t('voice.auto');
+    wrap.title = t('voice.autoTitle');
+    wrap.hidden = !canSpeak();
+  };
+  refresh();
+  return { el: wrap, refresh };
 }

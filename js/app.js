@@ -6,6 +6,7 @@ import { $, el, store, toast, copy, pieceNode, applyLook, wireStyleMenu } from '
 import { loadOpenings, identify, ecoVolume } from './openings.js';
 import { primerFor } from './opening-primers.js';
 import { animateMove } from './board-view.js';
+import { Narrator, voiceControls, autoRead, userActed } from './narrator.js';
 import { t, colorName as cName, timeControl, pieceName, setLang, chooseLang, onLangChange, wireLangPicker, lang } from './i18n.js';
 import { langNameEnglish } from './langs.js';
 
@@ -984,6 +985,7 @@ function startReview(ply) {
   }
   R.sel = null;
   render();
+  autoReadReview();
 }
 
 function firstNotedPly() {
@@ -996,10 +998,12 @@ function firstNotedPly() {
 function stepReview(to) {
   if (!R.review) return;
   const rec = reviewRecord();
+  const before = R.review.ply;
   R.review.ply = Math.max(0, Math.min(to, rec.moves.length));
   renderBoard();
   renderSheet();
   renderReview();
+  if (R.review.ply !== before) autoReadReview();
 }
 
 function nextNoted(dir) {
@@ -1009,6 +1013,42 @@ function nextNoted(dir) {
   const cur = R.review.ply;
   const target = dir > 0 ? plies.find((p) => p > cur) : [...plies].reverse().find((p) => p < cur);
   if (target != null) stepReview(target);
+}
+
+// ---------- reading the review aloud ----------
+const narrator = new Narrator(() => { const v = $('review-panel').querySelector('.ls-voice'); if (v && v._refresh) v._refresh(); });
+
+function reviewSpeech() {
+  const s = R.s;
+  const rec = reviewRecord();
+  const ply = R.review.ply;
+  const a = s.analysis[R.review.game] || { notes: {}, summaries: [] };
+  const parts = [];
+  if (ply === 0) parts.push(t('rv.start') + '.');
+  else {
+    const move = rec.moves[ply - 1];
+    parts.push(t('speak.moveBy', { color: move.color, move: move.san }));
+    const notes = reviewNotes(ply);
+    for (const n of notes) {
+      if (n.tag && n.tag !== 'note') parts.push(`${tagLabel(n.tag)}.`);
+      if (n.text) parts.push(n.text);
+      if (n.better) parts.push(t('speak.better', { move: n.better.san }));
+    }
+    if (!notes.length) parts.push(t('rv.noComment'));
+  }
+  if (ply === 0 || ply === rec.moves.length) {
+    for (const x of a.summaries) parts.push(`${t('rv.summaryFrom', { name: x.author })}: ${x.text}`);
+  }
+  return parts.join('\n');
+}
+const readReview = () => { if (R.review) narrator.speak(reviewSpeech()); };
+const autoReadReview = () => { if (R.review && autoRead() && userActed()) readReview(); };
+
+function reviewVoice() {
+  const v = voiceControls(narrator, readReview, { title: 'rv.listenTitle' });
+  v.el._refresh = v.refresh;
+  v.el.classList.add('rv-voice');
+  return v.el;
 }
 
 function renderReview() {
@@ -1086,7 +1126,8 @@ function renderReview() {
   panel.replaceChildren(
     el('div', { class: 'panel-head rv-head' },
       el('h2', { text: plies.length || a.summaries.length ? t('rv.titleCount', { n: G.noteCount(s, R.review.game) }) : t('rv.title') }),
-      el('button', { class: 'link-btn', type: 'button', text: t('rv.close'), onclick: () => { R.review = null; render(); } })),
+      el('button', { class: 'link-btn', type: 'button', text: t('rv.close'), onclick: () => { R.review = null; narrator.stop(); render(); } })),
+    reviewVoice(),
     ...body,
     el('div', { class: 'rv-nav' },
       el('span', { class: 'nav-end' }, nav(t('rv.first'), '⏮', 0, ply === 0)),
@@ -1095,7 +1136,7 @@ function renderReview() {
       el('span', { class: 'nav-end' }, nav(t('rv.last'), '⏭', total, ply >= total)),
       el('button', { class: 'btn', type: 'button', text: t('rv.nextComment'), disabled: !plies.some((p) => p > ply), onclick: () => nextNoted(1) })),
     el('p', { class: 'hint rv-tip', text: t('rv.tip') }),
-    el('button', { class: 'btn rv-close-bottom', type: 'button', text: t('rv.close'), onclick: () => { R.review = null; render(); } }),
+    el('button', { class: 'btn rv-close-bottom', type: 'button', text: t('rv.close'), onclick: () => { R.review = null; narrator.stop(); render(); } }),
   );
 }
 
@@ -1325,7 +1366,7 @@ function wireRoomControls() {
       stepReview(R.review.ply + steps[e.key]);
     } else if (e.key === 'Home') stepReview(0);
     else if (e.key === 'End') stepReview(Infinity);
-    else if (e.key === 'Escape') { R.review = null; render(); }
+    else if (e.key === 'Escape') { R.review = null; narrator.stop(); render(); }
   });
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && R.relay) R.relay.catchUp().then(render);

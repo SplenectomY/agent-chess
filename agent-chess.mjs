@@ -3054,6 +3054,24 @@ function textIn(v, code = "en", main = "en") {
     return "";
   return v[code] ?? v[main] ?? v.en ?? Object.values(v)[0] ?? "";
 }
+function audioField(v, where, warnings) {
+  if (v == null || v === "")
+    return;
+  const urls = typeof v === "string" ? { _: v } : typeof v === "object" ? v : {};
+  const ok = {};
+  for (const [k, u] of Object.entries(urls)) {
+    const url = String(u || "").trim();
+    if (/^https?:\/\/\S+$/i.test(url) && url.length <= 2000)
+      ok[k === "_" ? k : baseLang(k) || k] = url;
+    else
+      warnings.push(`${where}: audio ${JSON.stringify(u)} isn't an http(s) link, so it's left out (the text is read aloud instead).`);
+  }
+  if (!Object.keys(ok).length)
+    return;
+  if (ok._)
+    return ok._;
+  return ok;
+}
 function beginLangs() {
   langStats = { maps: 0, per: {} };
 }
@@ -3237,6 +3255,8 @@ function validatePuzzle(input) {
   const author = str(p.author, 60);
   const intro = str(p.intro);
   const conclusion = str(p.conclusion, 4000);
+  const narration = str(p.narration, 4000);
+  const audio = audioField(p.audio, "audio", warnings);
   const { lang, langs } = endLangs(p.lang, title || intro, warnings);
   const puzzle = errors.length ? null : {
     v: PUZZLE_VERSION,
@@ -3249,7 +3269,9 @@ function validatePuzzle(input) {
     opponentFirst,
     solverColor,
     line: steps,
-    conclusion
+    conclusion,
+    ...narration ? { narration } : {},
+    ...audio ? { audio } : {}
   };
   return { ok: !errors.length, errors, warnings, puzzle };
 }
@@ -3291,7 +3313,7 @@ function joinParts(events) {
 }
 
 // js/version.js
-var VERSION = "0.15.0";
+var VERSION = "0.16.0";
 
 // js/lesson-core.js
 var LESSON_TOPIC_PREFIX = "agentchess-lesson-v1-";
@@ -3337,19 +3359,9 @@ function validateLesson(input) {
     const narration = str(s.narration, 4000);
     if (narration)
       out.narration = narration;
-    if (s.audio != null && s.audio !== "") {
-      const urls = typeof s.audio === "string" ? { _: s.audio } : s.audio && typeof s.audio === "object" ? s.audio : {};
-      const ok = {};
-      for (const [k, u] of Object.entries(urls)) {
-        const url = String(u || "").trim();
-        if (/^https?:\/\/\S+$/i.test(url) && url.length <= 2000)
-          ok[k] = url;
-        else
-          warnings.push(`${where}: audio ${JSON.stringify(u)} isn't an http(s) link, so it's left out (the slide is read aloud instead).`);
-      }
-      if (Object.keys(ok).length)
-        out.audio = ok._ && Object.keys(ok).length === 1 ? ok._ : Object.fromEntries(Object.entries(ok).filter(([k]) => k !== "_"));
-    }
+    const audio = audioField(s.audio, where, warnings);
+    if (audio)
+      out.audio = audio;
     if (s.fen) {
       try {
         chess = loadFen(s.fen);

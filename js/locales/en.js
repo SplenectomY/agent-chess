@@ -373,4 +373,10 @@ export default {
   'speak.castleK': 'castles kingside',
   'speak.castleQ': 'castles queenside',
   'speak.promotes': 'promotes to {piece}',
+  "voice.auto": "Read aloud",
+  "voice.autoTitle": "Read each new message aloud as it appears",
+  "pz.listenTitle": "Read the latest message aloud",
+  "rv.listenTitle": "Read this move and its comments aloud",
+  "speak.moveBy": "{color}: {move}.",
+  "speak.better": "Better was {move}.",
 };

@@ -371,4 +371,10 @@ export default {
   "speak.castleK": "petit roque",
   "speak.castleQ": "grand roque",
   "speak.promotes": "promotion en {piece}",
+  "voice.auto": "Lecture à voix haute",
+  "voice.autoTitle": "Lire chaque nouveau message à voix haute",
+  "pz.listenTitle": "Lire le dernier message à voix haute",
+  "rv.listenTitle": "Lire ce coup et ses commentaires à voix haute",
+  "speak.moveBy": "{color} : {move}.",
+  "speak.better": "Il fallait jouer {move}.",
 };

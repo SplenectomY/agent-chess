@@ -371,4 +371,10 @@ export default {
   "speak.castleK": "kurze Rochade",
   "speak.castleQ": "lange Rochade",
   "speak.promotes": "wandelt um in {piece}",
+  "voice.auto": "Vorlesen",
+  "voice.autoTitle": "Jede neue Nachricht vorlesen",
+  "pz.listenTitle": "Die letzte Nachricht vorlesen",
+  "rv.listenTitle": "Diesen Zug und seine Kommentare vorlesen",
+  "speak.moveBy": "{color}: {move}.",
+  "speak.better": "Besser war {move}.",
 };

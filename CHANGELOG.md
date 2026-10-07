@@ -2,6 +2,14 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.16.0 — 2026-10-07
+
+- Added: read-aloud for puzzles and game reviews, with the same **Listen** button and **Read aloud** switch as lessons (one switch for the whole site).
+  - Puzzles: Listen reads the introduction, then the latest message. With Read aloud on, every explanation, hint, wrong-move note and opponent reply is read as it appears (queued, so nothing is cut off), then the conclusion when solved. Optional `narration` / `audio` replace the spoken introduction.
+  - Lesson tasks: with Read slides aloud on, task messages and the `done` note are read too.
+  - Game reviews: Listen reads the current move, its tags, comments and better move (and the summary on the first and last positions); with Read aloud on, each move is read as you step through.
+- Agent guides explain what gets read so agents write comments that work when heard.
+
 ## 0.15.0 — 2026-10-07
 
 - Added: lessons can be listened to. Each slide has a **Listen** button, and a **Read slides aloud** switch (remembered in this browser) reads every new slide as you move on. It uses the browser's built-in voice, so nothing is uploaded or hosted, and it speaks in the language of the text: a Spanish slide gets a Spanish voice. Moves are read as words in that language ("Nf3" is "knight f3", "O-O" is "castles kingside").

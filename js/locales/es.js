@@ -371,4 +371,10 @@ export default {
   "speak.castleK": "enroca corto",
   "speak.castleQ": "enroca largo",
   "speak.promotes": "corona {piece}",
+  "voice.auto": "Leer en voz alta",
+  "voice.autoTitle": "Leer en voz alta cada mensaje nuevo",
+  "pz.listenTitle": "Leer en voz alta el último mensaje",
+  "rv.listenTitle": "Leer en voz alta esta jugada y sus comentarios",
+  "speak.moveBy": "{color}: {move}.",
+  "speak.better": "Era mejor {move}.",
 };

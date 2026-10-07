@@ -10,6 +10,8 @@ import { drawBoard, wireBoardInput, askPromotion, parseTyped } from './board-vie
 import { Solver, renderFeedback, solverButtons, continueButton } from './solver.js';
 import { t, loc, setLang, chooseLang, onLangChange, wireLangPicker, setContentLang } from './i18n.js';
 import { loadShared, permanentLink } from './share-load.js';
+import { Narrator, voiceControls, feedbackSpeech, autoRead, userActed } from './narrator.js';
+import { locWith, lang } from './i18n.js';
 
 const P = {
   pz: null,
@@ -17,6 +19,34 @@ const P = {
   replay: null, // ply index while stepping through the solution after solving
   source: null,
 };
+
+// ---------- reading aloud ----------
+const narrator = new Narrator(() => voice && voice.refresh());
+let voice = null;
+let wasSolved = false;
+
+function introSpeech() {
+  const pz = P.pz;
+  if (pz.narration) return locWith(pz.narration);
+  const title = locWith(pz.title);
+  const intro = pz.intro ? locWith(pz.intro) : { text: t('pz.defaultIntro', { color: pz.solverColor }), lang: lang() };
+  return { text: `${title.text}.\n${intro.text}`, lang: intro.lang };
+}
+const solvedSpeech = () => `${t('pz.solved')} ${P.pz.conclusion ? locWith(P.pz.conclusion).text : ''}`;
+
+// Listen: the latest message, or the introduction before the first move.
+function readNow() {
+  const S = P.S;
+  if (S.solved) return narrator.speak(solvedSpeech());
+  if (S.feedback.length) return narrator.speak(feedbackSpeech(S.feedback[S.feedback.length - 1]));
+  const sp = introSpeech();
+  if (P.pz.audio && !P.pz.narration) {
+    const url = typeof P.pz.audio === 'string' ? P.pz.audio : locWith(P.pz.audio).text;
+    return narrator.play(url, () => narrator.speak(sp.text, sp.lang));
+  }
+  return narrator.speak(sp.text, sp.lang);
+}
+const autoOn = () => autoRead() && userActed();
 
 function showMissing(title, text) {
   $('pz-loading').hidden = true;
@@ -61,10 +91,15 @@ function render() {
   $('pz-actions').replaceChildren(...acts);
   renderDone();
   renderTextState();
+  if (S.solved && !wasSolved && autoOn()) narrator.speak(solvedSpeech(), lang(), { queue: true });
+  wasSolved = S.solved;
+  if (voice) voice.refresh();
 }
 
 function restart() {
   P.replay = null;
+  narrator.stop();
+  wasSolved = false;
   P.S.restart();
 }
 
@@ -182,8 +217,12 @@ if (loadError) {
   $('pz-loading').hidden = true;
   $('pz-game').hidden = false;
   renderIntro();
-  P.S = new Solver({ fen: P.pz.fen, line: P.pz.line, solverColor: P.pz.solverColor, opponentFirst: P.pz.opponentFirst, onChange: render });
+  P.S = new Solver({ fen: P.pz.fen, line: P.pz.line, solverColor: P.pz.solverColor, opponentFirst: P.pz.opponentFirst, onChange: render,
+    onFeedback: (f) => { if (autoOn()) narrator.speak(feedbackSpeech(f), lang(), { queue: true }); } });
+  voice = voiceControls(narrator, readNow, { title: 'pz.listenTitle' });
+  $('pz-voice').replaceChildren(voice.el);
   wireInput();
   render();
 }
-onLangChange(() => { if (P.S) { renderIntro(); render(); } });
+onLangChange(() => { if (P.S) { narrator.stop(); renderIntro(); render(); } });
+window.addEventListener('pagehide', () => narrator.stop());

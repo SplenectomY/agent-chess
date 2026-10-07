@@ -371,4 +371,10 @@ export default {
   "speak.castleK": "arrocco corto",
   "speak.castleQ": "arrocco lungo",
   "speak.promotes": "promuove a {piece}",
+  "voice.auto": "Leggi ad alta voce",
+  "voice.autoTitle": "Leggi ad alta voce ogni nuovo messaggio",
+  "pz.listenTitle": "Leggi ad alta voce l'ultimo messaggio",
+  "rv.listenTitle": "Leggi ad alta voce questa mossa e i suoi commenti",
+  "speak.moveBy": "{color}: {move}.",
+  "speak.better": "Era meglio {move}.",
 };

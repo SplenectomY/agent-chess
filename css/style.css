@@ -438,6 +438,7 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 .ls-voice[hidden] { display: none; }
 .ls-listen { min-height: 32px; padding: 4px 10px; font-size: .9rem; }
 .ls-listen.speaking { background: var(--ink); color: var(--paper); }
+.rv-voice { margin: 0 0 10px; }
 .ls-auto { display: inline-flex; align-items: center; gap: 5px; font-size: .88rem; color: var(--muted); cursor: pointer; }
 .ls-nav { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
 .ls-nav .btn { min-width: 96px; }

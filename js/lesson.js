@@ -10,7 +10,7 @@ import { drawBoard, wireBoardInput, askPromotion, parseTyped } from './board-vie
 import { Solver, renderFeedback, solverButtons, continueButton } from './solver.js';
 import { t, loc, locWith, lang, setLang, chooseLang, onLangChange, wireLangPicker, setContentLang } from './i18n.js';
 import { loadShared, permanentLink } from './share-load.js';
-import { Narrator, canSpeak } from './narrator.js';
+import { Narrator, canSpeak, autoRead as autoReadOn, setAutoRead, feedbackSpeech } from './narrator.js';
 
 const L = {
   ls: null,
@@ -82,7 +82,6 @@ function movesLabel(slide) {
 
 // ---------- narration ----------
 const narrator = new Narrator(() => renderVoice());
-let autoRead = !!store.get('agentchess:narrate');
 
 // What to read for a slide: its "narration", else its title, text and task prompt.
 function slideSpeech(s) {
@@ -111,7 +110,7 @@ function renderVoice() {
   btn.textContent = narrator.speaking ? t('ls.stopListening') : t('ls.listen');
   btn.title = t('ls.listenTitle');
   btn.classList.toggle('speaking', narrator.speaking);
-  $('ls-auto').checked = autoRead;
+  $('ls-auto').checked = autoReadOn();
 }
 
 // ---------- state helpers ----------
@@ -121,7 +120,19 @@ function solverFor(i) {
   const s = L.ls.slides[i];
   if (!s.task) return null;
   if (!L.solvers[i]) {
-    L.solvers[i] = new Solver({ fen: s.fen, line: s.task.line, solverColor: s.task.solverColor, onChange: () => { if (L.idx === i) render(); } });
+    let wasSolved = false;
+    L.solvers[i] = new Solver({ fen: s.fen, line: s.task.line, solverColor: s.task.solverColor,
+      onChange: () => {
+        const S = L.solvers[i];
+        // Read the "done" note once, right after the task is solved.
+        if (S && S.solved && !wasSolved && s.task.done && autoReadOn() && L.userActed && L.idx === i) {
+          const d = locWith(s.task.done);
+          narrator.speak(d.text, d.lang, { queue: true });
+        }
+        wasSolved = !!(S && S.solved);
+        if (L.idx === i) render();
+      },
+      onFeedback: (f) => { if (autoReadOn() && L.userActed && L.idx === i) narrator.speak(feedbackSpeech(f), lang(), { queue: true }); } });
   }
   return L.solvers[i];
 }
@@ -153,7 +164,7 @@ function go(i) {
   if (S) S.sel = null;
   narrator.stop();
   render();
-  if (autoRead && L.userActed) readSlide();
+  if (autoReadOn() && L.userActed) readSlide();
 }
 
 function next() {
@@ -343,10 +354,9 @@ function wireInput() {
   for (const ev of ['pointerdown', 'keydown']) document.addEventListener(ev, () => { L.userActed = true; }, { capture: true });
   $('ls-listen').addEventListener('click', () => (narrator.speaking ? narrator.stop() : readSlide()));
   $('ls-auto').addEventListener('change', (e) => {
-    autoRead = e.target.checked;
-    store.set('agentchess:narrate', autoRead);
-    if (autoRead && !narrator.speaking) readSlide();
-    else if (!autoRead) narrator.stop();
+    setAutoRead(e.target.checked);
+    if (e.target.checked && !narrator.speaking) readSlide();
+    else if (!e.target.checked) narrator.stop();
   });
   $('ls-next').addEventListener('click', next);
   $('ls-prev').addEventListener('click', prev);

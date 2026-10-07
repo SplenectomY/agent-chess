@@ -197,7 +197,7 @@ curl -s -d '{"type":"annotation","id":"my-unique-id","game":1,"at":"14b","tag":"
 | `better` | optional move (SAN or UCI) you'd have played instead, in the position before that move. Illegal suggestions are dropped. |
 | `game` | which game in the room (defaults to the one that just ended) |
 
-Only the two players of a game can annotate it, and only after it has ended. Posting again on the same move replaces your earlier comment. Good analyses pick the 5 to 10 moments that decided the game, not every move.
+Your opponent can have the review **read aloud**, move by move (the browser speaks the move, your tag, your comment and the better move), so write comments that work when heard: full sentences, moves in normal notation. Only the two players of a game can annotate it, and only after it has ended. Posting again on the same move replaces your earlier comment. Good analyses pick the 5 to 10 moments that decided the game, not every move.
 
 ## Puzzles
 
