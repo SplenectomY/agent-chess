@@ -1,52 +1,98 @@
 {
-  "title": "Back-rank weakness",
+  "lang": "en",
+  "title": {
+    "en": "Back-rank weakness",
+    "es": "Debilidad de la última fila"
+  },
   "author": "Agent Chess",
   "fen": "r5k1/5ppp/8/8/8/2Q5/5PPP/2R3K1 w - - 0 1",
-  "intro": "White to move and mate in 2. Black's king is boxed in by its own pawns. Find the way in.",
+  "intro": {
+    "en": "White to move and mate in 2. Black's king is boxed in by its own pawns. Find the way in.",
+    "es": "Juegan las blancas y dan mate en 2. El rey negro está encerrado por sus propios peones. Encuentra la forma de entrar."
+  },
   "line": [
     {
       "move": "Qc8+",
       "hints": [
-        "The only black piece guarding the back rank is the rook on a8.",
-        "What happens if that rook is forced to leave the a8 square?",
-        "Your queen and rook are lined up on the c-file. Use the front one as bait."
+        {
+          "en": "The only black piece guarding the back rank is the rook on a8.",
+          "es": "La única pieza negra que defiende la octava fila es la torre de a8."
+        },
+        {
+          "en": "What happens if that rook is forced to leave the a8 square?",
+          "es": "¿Qué pasa si esa torre se ve obligada a dejar la casilla a8?"
+        },
+        {
+          "en": "Your queen and rook are lined up on the c-file. Use the front one as bait.",
+          "es": "Tu dama y tu torre están alineadas en la columna c. Usa la de delante como cebo."
+        }
       ],
-      "explain": "A queen sacrifice! The check forces Black's rook to take, and that pulls it onto c8, right in front of your rook.",
+      "explain": {
+        "en": "A queen sacrifice! The check forces Black's rook to take, and that pulls it onto c8, right in front of your rook.",
+        "es": "¡Un sacrificio de dama! El jaque obliga a la torre negra a capturar, y eso la lleva a c8, justo delante de tu torre."
+      },
       "wrong": {
         "Qxg7+": {
-          "text": "The king simply takes the queen and the attack is over.",
+          "text": {
+            "en": "The king simply takes the queen and the attack is over.",
+            "es": "El rey simplemente captura la dama y el ataque se acaba."
+          },
           "tag": "blunder",
           "replies": [
             "Kxg7"
           ]
         },
-        "Qc7": "Quiet moves give Black time to play ...h6 and make an escape square.",
+        "Qc7": {
+          "en": "Quiet moves give Black time to play ...h6 and make an escape square.",
+          "es": "Las jugadas tranquilas dan tiempo a las negras para jugar ...h6 y abrir una casilla de escape."
+        },
         "Rc2": {
-          "text": "White is still winning, but Black now plays ...h6 or ...g6 and the back-rank mate is gone. There's a mate in 2 right now.",
+          "text": {
+            "en": "White is still winning, but Black now plays ...h6 or ...g6 and the back-rank mate is gone. There's a mate in 2 right now.",
+            "es": "Las blancas siguen ganando, pero ahora las negras juegan ...h6 o ...g6 y el mate en la última fila desaparece. Ahora mismo hay mate en 2."
+          },
           "tag": "better-available"
         },
-        "*": "Black's king has no escape squares. Look for a check on the 8th rank that Black can only answer one way."
+        "*": {
+          "en": "Black's king has no escape squares. Look for a check on the 8th rank that Black can only answer one way.",
+          "es": "El rey negro no tiene casillas de escape. Busca un jaque en la octava fila que las negras solo puedan contestar de una manera."
+        }
       },
       "tag": "brilliant",
       "replies": [
         {
           "move": "Rxc8",
-          "text": "forced"
+          "text": {
+            "en": "forced",
+            "es": "forzada"
+          }
         }
       ]
     },
     {
       "move": "Rxc8",
-      "explain": "Forced: the king can't move (f8 and h8 are covered along the rank, and its own pawns block the rest)."
+      "explain": {
+        "en": "Forced: the king can't move (f8 and h8 are covered along the rank, and its own pawns block the rest).",
+        "es": "Forzada: el rey no puede moverse (f8 y h8 están cubiertas a lo largo de la fila y sus propios peones bloquean el resto)."
+      }
     },
     {
       "move": "Rxc8#",
       "hints": [
-        "The c-file is open all the way now."
+        {
+          "en": "The c-file is open all the way now.",
+          "es": "La columna c ya está abierta de punta a punta."
+        }
       ],
-      "explain": "Checkmate. The rook takes on c8 and the king is trapped behind its own pawns.",
+      "explain": {
+        "en": "Checkmate. The rook takes on c8 and the king is trapped behind its own pawns.",
+        "es": "Jaque mate. La torre captura en c8 y el rey queda atrapado detrás de sus propios peones."
+      },
       "tag": "best"
     }
   ],
-  "conclusion": "This is the classic back-rank mate. When a king has no escape square (here f7, g7 and h7 are all its own pawns), a single heavy piece on the 8th rank can mate. The queen sacrifice works because it deflects the only defender, the a8 rook, onto a square where your rook can take it with mate. In your own games, a quiet ...h6 (or h3 for White) early on removes this whole danger."
+  "conclusion": {
+    "en": "This is the classic back-rank mate. When a king has no escape square (here f7, g7 and h7 are all its own pawns), a single heavy piece on the 8th rank can mate. The queen sacrifice works because it deflects the only defender, the a8 rook, onto a square where your rook can take it with mate. In your own games, a quiet ...h6 (or h3 for White) early on removes this whole danger.",
+    "es": "Este es el clásico mate del pasillo. Cuando un rey no tiene casilla de escape (aquí f7, g7 y h7 son sus propios peones), una sola pieza pesada en la octava fila puede dar mate. El sacrificio de dama funciona porque desvía al único defensor, la torre de a8, a una casilla donde tu torre la captura con mate. En tus propias partidas, un tranquilo ...h6 (o h3 con blancas) al principio elimina todo este peligro."
+  }
 }

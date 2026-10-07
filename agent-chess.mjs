@@ -2374,6 +2374,28 @@ function tagKey(v) {
   return bySymbol || null;
 }
 
+// js/langs.js
+var LANGS = [
+  { code: "en", native: "English", english: "English" },
+  { code: "es", native: "Español", english: "Spanish" },
+  { code: "fr", native: "Français", english: "French" },
+  { code: "de", native: "Deutsch", english: "German" },
+  { code: "it", native: "Italiano", english: "Italian" },
+  { code: "pt", native: "Português", english: "Portuguese" },
+  { code: "ru", native: "Русский", english: "Russian" },
+  { code: "zh", native: "中文", english: "Chinese (Simplified)" },
+  { code: "ja", native: "日本語", english: "Japanese" }
+];
+var LANG_CODES = LANGS.map((l) => l.code);
+function baseLang(code) {
+  const m = /^([a-z]{2,3})(?:[-_]|$)/i.exec(String(code || "").trim());
+  return m ? m[1].toLowerCase() : "";
+}
+function langNameEnglish(code) {
+  const l = LANGS.find((x) => x.code === baseLang(code));
+  return l ? l.english : String(code || "");
+}
+
 // js/game.js
 var PROTOCOL_VERSION = 1;
 var GRACE_MS = 1000;
@@ -2403,6 +2425,10 @@ function describeTimeControl(tc) {
   const mins = tc.initial / 60000;
   const m = Number.isInteger(mins) ? String(mins) : mins.toFixed(1).replace(/\.0$/, "");
   return `${m} min + ${inc}`;
+}
+function cleanLang(v) {
+  const b = baseLang(v);
+  return b || null;
 }
 function cleanText(s, max) {
   return typeof s === "string" ? s.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, max) : "";
@@ -2438,8 +2464,8 @@ function seatOf(s, id) {
 var isActive = (s) => s.started && !s.result;
 var turn = (s) => s.chess.turn();
 var playerName = (s, c) => s.players[c] ? s.players[c].name : colorName(c);
-function system(s, time, text) {
-  s.feed.push({ time, kind: "system", text });
+function system(s, time, text, key = null, vars = null) {
+  s.feed.push({ time, kind: "system", text, key, vars });
 }
 function canStillMate(chess, color) {
   let minors = 0;
@@ -2463,11 +2489,11 @@ function canStillMate(chess, color) {
     return opponentHasPieces;
   return false;
 }
-function finish(s, winner, reason, time) {
-  s.result = { winner, reason, time };
+function finish(s, winner, reason, time, code, vars = {}) {
+  s.result = { winner, reason, time, code, vars };
   s.drawOffer = null;
   const text = winner ? `${playerName(s, winner)} (${colorName(winner)}) wins — ${reason}.` : `Draw — ${reason}.`;
-  system(s, time, text);
+  system(s, time, text, winner ? "win" : "drawResult", { name: playerName(s, winner), color: winner, code, ...vars });
 }
 function clockAt(s, now) {
   if (!s.clock)
@@ -2488,10 +2514,11 @@ function checkFlag(s, time) {
   const fellAt = s.turnStart + s.clock[side];
   s.clock[side] = 0;
   const winner = other(side);
+  const v = { who: playerName(s, side), winnerName: playerName(s, winner) };
   if (canStillMate(s.chess, winner))
-    finish(s, winner, `${playerName(s, side)} ran out of time`, fellAt);
+    finish(s, winner, `${playerName(s, side)} ran out of time`, fellAt, "timeout", v);
   else
-    finish(s, null, `${playerName(s, side)} ran out of time, but ${playerName(s, winner)} cannot checkmate`, fellAt);
+    finish(s, null, `${playerName(s, side)} ran out of time, but ${playerName(s, winner)} cannot checkmate`, fellAt, "timeoutDraw", v);
   return true;
 }
 var UCI_RE = /^([a-h][1-8])([a-h][1-8])([qrbn])?$/i;
@@ -2540,7 +2567,7 @@ function startNewGame(s, time) {
   s.result = null;
   s.drawOffer = null;
   s.rematch = { w: false, b: false };
-  system(s, time, `Game ${s.game} started. ${playerName(s, "w")} has White, ${playerName(s, "b")} has Black.`);
+  system(s, time, `Game ${s.game} started. ${playerName(s, "w")} has White, ${playerName(s, "b")} has Black.`, "started", { g: s.game, white: playerName(s, "w"), black: playerName(s, "b") });
 }
 function applyEvent(s, ev) {
   const d = ev && ev.data;
@@ -2564,9 +2591,9 @@ function applyEvent(s, ev) {
       const color = d.color === "b" ? "b" : "w";
       const tc = parseTimeControl(d.time);
       s.room = { host: pid, tc, createdAt: T };
-      s.players[color] = { id: pid, name: cleanText(d.name, NAME_MAX) || "Host" };
+      s.players[color] = { id: pid, name: cleanText(d.name, NAME_MAX) || "Host", lang: cleanLang(d.lang) };
       s.clock = tc ? { w: tc.initial, b: tc.initial } : null;
-      system(s, T, `${s.players[color].name} opened the room as ${colorName(color)} (${describeTimeControl(tc)}).`);
+      system(s, T, `${s.players[color].name} opened the room as ${colorName(color)} (${describeTimeControl(tc)}).`, "opened", { name: s.players[color].name, color, tc });
       return;
     }
     case "join": {
@@ -2576,15 +2603,17 @@ function applyEvent(s, ev) {
       if (seat) {
         if (name && name !== s.players[seat].name)
           s.players[seat].name = name;
+        if (cleanLang(d.lang))
+          s.players[seat].lang = cleanLang(d.lang);
         return;
       }
       const free = !s.players.w ? "w" : !s.players.b ? "b" : null;
       if (!free)
         return;
-      s.players[free] = { id: pid, name: name || `Player ${free === "w" ? 1 : 2}` };
+      s.players[free] = { id: pid, name: name || `Player ${free === "w" ? 1 : 2}`, lang: cleanLang(d.lang) };
       s.started = true;
       s.turnStart = T;
-      system(s, T, `${s.players[free].name} joined as ${colorName(free)}. White to move.`);
+      system(s, T, `${s.players[free].name} joined as ${colorName(free)}. White to move.`, "joined", { name: s.players[free].name, color: free });
       return;
     }
     case "move": {
@@ -2618,19 +2647,19 @@ function applyEvent(s, ev) {
       });
       if (s.drawOffer && s.drawOffer !== side) {
         s.drawOffer = null;
-        system(s, T, `${playerName(s, side)} declined the draw by playing on.`);
+        system(s, T, `${playerName(s, side)} declined the draw by playing on.`, "declinedByMoving", { name: playerName(s, side) });
       }
       const c = s.chess;
       if (c.isCheckmate())
-        finish(s, side, "checkmate", T);
+        finish(s, side, "checkmate", T, "checkmate");
       else if (c.isStalemate())
-        finish(s, null, "stalemate", T);
+        finish(s, null, "stalemate", T, "stalemate");
       else if (c.isInsufficientMaterial())
-        finish(s, null, "insufficient material", T);
+        finish(s, null, "insufficient material", T, "insufficient");
       else if (c.isThreefoldRepetition())
-        finish(s, null, "threefold repetition", T);
+        finish(s, null, "threefold repetition", T, "threefold");
       else if (c.isDrawByFiftyMoves())
-        finish(s, null, "fifty-move rule", T);
+        finish(s, null, "fifty-move rule", T, "fifty");
       return;
     }
     case "resign": {
@@ -2638,7 +2667,7 @@ function applyEvent(s, ev) {
         return;
       if (checkFlag(s, T))
         return;
-      finish(s, other(seat), `${playerName(s, seat)} resigned`, T);
+      finish(s, other(seat), `${playerName(s, seat)} resigned`, T, "resigned", { who: playerName(s, seat) });
       return;
     }
     case "offer-draw": {
@@ -2647,10 +2676,10 @@ function applyEvent(s, ev) {
       if (checkFlag(s, T))
         return;
       if (s.drawOffer === other(seat)) {
-        finish(s, null, "agreed", T);
+        finish(s, null, "agreed", T, "agreed");
       } else if (s.drawOffer !== seat) {
         s.drawOffer = seat;
-        system(s, T, `${playerName(s, seat)} offers a draw.`);
+        system(s, T, `${playerName(s, seat)} offers a draw.`, "offersDraw", { name: playerName(s, seat) });
       }
       return;
     }
@@ -2659,14 +2688,14 @@ function applyEvent(s, ev) {
         return;
       if (checkFlag(s, T))
         return;
-      finish(s, null, "agreed", T);
+      finish(s, null, "agreed", T, "agreed");
       return;
     }
     case "decline-draw": {
       if (!isActive(s) || !seat || s.drawOffer !== other(seat))
         return;
       s.drawOffer = null;
-      system(s, T, `${playerName(s, seat)} declined the draw.`);
+      system(s, T, `${playerName(s, seat)} declined the draw.`, "declinedDraw", { name: playerName(s, seat) });
       return;
     }
     case "add-time": {
@@ -2676,7 +2705,7 @@ function applyEvent(s, ev) {
         return;
       const secs = Math.max(1, Math.min(Number(d.seconds) || 15, 600));
       s.clock[other(seat)] += secs * 1000;
-      system(s, T, `${playerName(s, seat)} gave ${playerName(s, other(seat))} ${secs} seconds.`);
+      system(s, T, `${playerName(s, seat)} gave ${playerName(s, other(seat))} ${secs} seconds.`, "gaveTime", { name: playerName(s, seat), other: playerName(s, other(seat)), n: secs });
       return;
     }
     case "flag": {
@@ -2690,7 +2719,7 @@ function applyEvent(s, ev) {
       if (s.rematch.w && s.rematch.b)
         startNewGame(s, T);
       else
-        system(s, T, `${playerName(s, seat)} wants a rematch (colors swap).`);
+        system(s, T, `${playerName(s, seat)} wants a rematch (colors swap).`, "rematch", { name: playerName(s, seat) });
       return;
     }
     case "analysis-request": {
@@ -2705,7 +2734,7 @@ function applyEvent(s, ev) {
       if (a.requests.some((r) => r.color === color))
         return;
       a.requests.push({ color, by: rec.players[color].name, time: T });
-      system(s, T, `${rec.players[color].name} asked for a post-game analysis of game ${g}.`);
+      system(s, T, `${rec.players[color].name} asked for a post-game analysis of game ${g}.`, "askedAnalysis", { name: rec.players[color].name, g });
       return;
     }
     case "analysis-status": {
@@ -2726,10 +2755,10 @@ function applyEvent(s, ev) {
         return;
       a.status = { state, authorId: pid, author, color, since: a.status && a.status.since || T, updated: T };
       if (state === "working")
-        system(s, T, `${author} started the analysis of game ${g}.`);
+        system(s, T, `${author} started the analysis of game ${g}.`, "analysisStarted", { name: author, g });
       else {
         const n = noteCount(s, g);
-        system(s, T, `${author} finished the analysis of game ${g} (${n} comment${n === 1 ? "" : "s"}).`);
+        system(s, T, `${author} finished the analysis of game ${g} (${n} comment${n === 1 ? "" : "s"}).`, "analysisDone", { name: author, g, n });
       }
       return;
     }
@@ -2769,12 +2798,12 @@ function applyEvent(s, ev) {
       }
       if (!a.status || a.status.authorId === pid && a.status.state !== "done") {
         if (!a.status)
-          system(s, T, `${author} started the analysis of game ${g}.`);
+          system(s, T, `${author} started the analysis of game ${g}.`, "analysisStarted", { name: author, g });
         a.status = { state: "working", authorId: pid, author, color, since: a.status && a.status.since || T, updated: T };
       } else if (a.status.authorId === pid) {
         a.status.updated = T;
       } else if (firstFromAuthor) {
-        system(s, T, `${author} is annotating game ${g}.`);
+        system(s, T, `${author} is annotating game ${g}.`, "annotating", { name: author, g });
       }
       return;
     }
@@ -2908,6 +2937,7 @@ function describeState(s, { me = null, now = null } = {}) {
   lines.push(`Game ${s.game} · ${describeTimeControl(s.room.tc)}`);
   lines.push(`White: ${playerName(s, "w")}${s.players.w ? "" : " (open seat)"}${mySeat === "w" ? " ← you" : ""}`);
   lines.push(`Black: ${playerName(s, "b")}${s.players.b ? "" : " (open seat)"}${mySeat === "b" ? " ← you" : ""}`);
+  lines.push(...languageNotes(s, mySeat));
   const clk = clockAt(s, now);
   if (clk)
     lines.push(`Clock: White ${formatClock(clk.w)} · Black ${formatClock(clk.b)}`);
@@ -2933,6 +2963,17 @@ function describeState(s, { me = null, now = null } = {}) {
   lines.push(asciiBoard(s.chess, mySeat === "b"));
   return lines.join(`
 `);
+}
+function languageNotes(s, mySeat = null) {
+  const out = [];
+  for (const c of ["w", "b"]) {
+    const p = s.players[c];
+    if (!p || !p.lang || p.lang === "en" || c === mySeat)
+      continue;
+    const name = langNameEnglish(p.lang);
+    out.push(`Language: ${p.name} reads ${name} (${p.lang}). Write chat messages and analysis comments for them in ${name}.`);
+  }
+  return out;
 }
 function movesText(s) {
   const out = [];
@@ -2977,7 +3018,58 @@ var PUZZLE_VERSION = 1;
 var PUZZLE_TOPIC_PREFIX = "agentchess-puzzle-v1-";
 var ID_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789";
 var TEXT_MAX = 2000;
-var str = (v, max = TEXT_MAX) => typeof v === "string" ? v.trim().slice(0, max) : "";
+var langStats = null;
+function str(v, max = TEXT_MAX) {
+  if (typeof v === "string")
+    return v.trim().slice(0, max);
+  if (!isTextMap(v))
+    return "";
+  const out = {};
+  for (const [k, val] of Object.entries(v)) {
+    const code = baseLang(k);
+    const text = typeof val === "string" ? val.trim().slice(0, max) : "";
+    if (code && text)
+      out[code] = text;
+  }
+  const keys = Object.keys(out);
+  if (!keys.length)
+    return "";
+  if (langStats) {
+    langStats.maps++;
+    for (const k of keys)
+      langStats.per[k] = (langStats.per[k] || 0) + 1;
+  }
+  return out;
+}
+function isTextMap(v) {
+  if (!v || typeof v !== "object" || Array.isArray(v))
+    return false;
+  const keys = Object.keys(v);
+  return keys.length > 0 && keys.every((k) => /^[a-z]{2,3}([-_][a-z0-9]+)*$/i.test(k) && !["text", "tag", "move"].includes(k)) && Object.values(v).every((x) => typeof x === "string");
+}
+function textIn(v, code = "en", main = "en") {
+  if (typeof v === "string")
+    return v;
+  if (!v || typeof v !== "object")
+    return "";
+  return v[code] ?? v[main] ?? v.en ?? Object.values(v)[0] ?? "";
+}
+function beginLangs() {
+  langStats = { maps: 0, per: {} };
+}
+function endLangs(declared, firstMap, warnings) {
+  const st = langStats || { maps: 0, per: {} };
+  langStats = null;
+  const main = baseLang(declared) || (firstMap && typeof firstMap === "object" ? Object.keys(firstMap)[0] : "") || "en";
+  const others = Object.keys(st.per).filter((k) => k !== main).sort((a, b) => st.per[b] - st.per[a]);
+  for (const k of [main, ...others]) {
+    const have = st.per[k] || 0;
+    if (st.maps && have < st.maps && (k !== main || have > 0)) {
+      warnings.push(`${langNameEnglish(k)} (${k}) is missing from ${st.maps - have} of ${st.maps} translated text(s); those show in another language.`);
+    }
+  }
+  return { lang: main, langs: [main, ...others] };
+}
 function tryMove2(chess, text) {
   if (typeof text !== "string" || !text.trim())
     return null;
@@ -3035,8 +3127,11 @@ function validateLine({ fen, line, opponentFirst = false, errors, warnings, labe
         if (out.some((x) => x.san === m.san))
           continue;
         const o = { san: m.san, from: m.from, to: m.to };
-        if (r && typeof r === "object" && r.text)
-          o.text = str(r.text, 300);
+        if (r && typeof r === "object" && r.text) {
+          const tx = str(r.text, 300);
+          if (tx)
+            o.text = tx;
+        }
         out.push(o);
       }
       return out.length ? out : undefined;
@@ -3073,7 +3168,7 @@ function validateLine({ fen, line, opponentFirst = false, errors, warnings, labe
       if (step.wrong && typeof step.wrong === "object") {
         const wrong = {};
         for (const [k, v] of Object.entries(step.wrong)) {
-          const obj = v && typeof v === "object" ? v : { text: v };
+          const obj = v && typeof v === "object" && !isTextMap(v) ? v : { text: v };
           const entry = { text: str(obj.text) };
           const wtag = tagOf(obj.tag, `wrong move "${k}"`);
           if (wtag)
@@ -3123,6 +3218,7 @@ function validatePuzzle(input) {
   }
   if (!p || typeof p !== "object")
     return { ok: false, errors: ["The puzzle must be a JSON object."], warnings, puzzle: null };
+  beginLangs();
   const chess = new Chess;
   try {
     chess.load(String(p.fen || ""));
@@ -3137,16 +3233,23 @@ function validatePuzzle(input) {
   if (steps.length && !errors.length && !steps[steps.length - 1].solver) {
     warnings.push("The line ends with the opponent's move. Usually a puzzle ends on the solver's move.");
   }
+  const title = str(p.title, 120);
+  const author = str(p.author, 60);
+  const intro = str(p.intro);
+  const conclusion = str(p.conclusion, 4000);
+  const { lang, langs } = endLangs(p.lang, title || intro, warnings);
   const puzzle = errors.length ? null : {
     v: PUZZLE_VERSION,
-    title: str(p.title, 120) || "Puzzle",
-    author: str(p.author, 60),
+    lang,
+    langs,
+    title: title || "Puzzle",
+    author,
     fen: new Chess(String(p.fen)).fen(),
-    intro: str(p.intro),
+    intro,
     opponentFirst,
     solverColor,
     line: steps,
-    conclusion: str(p.conclusion, 4000)
+    conclusion
   };
   return { ok: !errors.length, errors, warnings, puzzle };
 }
@@ -3188,7 +3291,7 @@ function joinParts(events) {
 }
 
 // js/version.js
-var VERSION = "0.12.0";
+var VERSION = "0.13.0";
 
 // js/lesson-core.js
 var LESSON_TOPIC_PREFIX = "agentchess-lesson-v1-";
@@ -3213,6 +3316,7 @@ function validateLesson(input) {
   }
   if (!p || typeof p !== "object")
     return { ok: false, errors: ["The lesson must be a JSON object."], warnings, lesson: null };
+  beginLangs();
   let chess;
   try {
     chess = p.fen ? loadFen(p.fen) : new Chess;
@@ -3334,16 +3438,21 @@ function validateLesson(input) {
       warnings.push(`${where}: no title, text or task, so the slide only shows a board.`);
     return out;
   });
+  const title = str(p.title, 120);
+  const head = { author: str(p.author, 60), level: str(p.level, 40), primer: str(p.primer, 8000), conclusion: str(p.conclusion, 4000) };
+  const { lang, langs } = endLangs(p.lang, title || head.primer, warnings);
   const lesson = errors.length ? null : {
     v: PUZZLE_VERSION,
-    title: str(p.title, 120) || "Lesson",
-    author: str(p.author, 60),
-    level: str(p.level, 40),
-    primer: str(p.primer, 8000),
+    lang,
+    langs,
+    title: title || "Lesson",
+    author: head.author,
+    level: head.level,
+    primer: head.primer,
     fen: startFen,
     orientation,
     slides,
-    conclusion: str(p.conclusion, 4000)
+    conclusion: head.conclusion
   };
   return { ok: !errors.length, errors, warnings, lesson };
 }
@@ -3396,6 +3505,7 @@ Commands
 Options
   --id ID        Your player id (default: generated once per room and saved in ~/.agent-chess.json)
   --name NAME    Your display name
+  --lang CODE    Your language (e.g. es) for create/join; players see it, the CLI stays in English
   --relay URL    Relay server (default ${DEFAULT_RELAY})
   --json         Print machine-readable JSON instead of text
   --version      Print the version
@@ -3648,7 +3758,7 @@ async function cmdCreate() {
   }
   const id = opt.id || "agent-" + randomBytes(6).toString("hex");
   saveId(code, { id, name });
-  const msgId = await publish(code, { type: "create", id, name, color, time });
+  const msgId = await publish(code, { type: "create", id, name, color, time, lang: opt.lang ? String(opt.lang) : undefined });
   const s = await settle(code, [], msgId);
   const link = `${SITE}?room=${code}${RELAY !== DEFAULT_RELAY ? `&relay=${encodeURIComponent(RELAY)}` : ""}`;
   if (JSON_OUT)
@@ -3675,7 +3785,7 @@ async function cmdJoin() {
   if (!name)
     die('Pass --name "YOUR NAME" to join.');
   saveId(code, { id, name });
-  const msgId = await publish(code, { type: "join", id, name });
+  const msgId = await publish(code, { type: "join", id, name, lang: opt.lang ? String(opt.lang) : undefined });
   const after = await settle(code, events, msgId);
   const seat = seatOf(after, id);
   if (!seat)
@@ -3747,12 +3857,15 @@ async function cmdReview() {
   if (seat && a.requests.some((r) => r.color !== seat) && !(a.status && a.status.authorId === id)) {
     await publish(code, { type: "analysis-status", id, game: g, state: "working" });
   }
+  const reader = seat ? rec.players[other(seat)] : null;
+  const readerLang = reader && reader.lang && reader.lang !== "en" ? reader.lang : null;
   if (JSON_OUT) {
     console.log(JSON.stringify({
       ok: true,
       game: g,
       white: rec.players.w && rec.players.w.name,
       black: rec.players.b && rec.players.b.name,
+      commentLanguage: readerLang || "en",
       you: seat ? colorName(seat).toLowerCase() : "spectator",
       result: resultString(rec.result),
       reason: rec.result.reason,
@@ -3772,6 +3885,8 @@ async function cmdReview() {
   console.log(`Game ${g}: ${rec.players.w ? rec.players.w.name : "White"} (White) vs ${rec.players.b ? rec.players.b.name : "Black"} (Black) — ${resultString(rec.result)}, ${rec.result.reason}.`);
   if (seat)
     console.log(`You played ${colorName(seat)}.`);
+  if (readerLang)
+    console.log(`${reader.name} reads ${langNameEnglish(readerLang)} (${readerLang}): write your comments and summary in ${langNameEnglish(readerLang)}.`);
   console.log(`
 AT     MOVE      POSITION BEFORE THE MOVE (FEN)`);
   rec.moves.forEach((m, i) => {
@@ -3889,7 +4004,8 @@ function readShareFile(kind, validate) {
   return { json, r };
 }
 function describePuzzle(pz) {
-  const lines = [`"${pz.title}"${pz.author ? ` by ${pz.author}` : ""}: ${pz.solverColor === "w" ? "White" : "Black"} to solve, ${pz.line.filter((x) => x.solver).length} move(s) to find.`];
+  const langs = pz.langs && pz.langs.length > 1 ? ` Languages: ${pz.langs.join(", ")}.` : pz.lang && pz.lang !== "en" ? ` Language: ${pz.lang}.` : "";
+  const lines = [`"${textIn(pz.title, pz.lang, pz.lang)}"${pz.author ? ` by ${textIn(pz.author)}` : ""}:${langs} ${pz.solverColor === "w" ? "White" : "Black"} to solve, ${pz.line.filter((x) => x.solver).length} move(s) to find.`];
   pz.line.forEach((st, i) => {
     const extra = st.solver ? ` [${(st.hints || []).length} hint(s)${st.wrong ? `, explains ${Object.keys(st.wrong).filter((k) => k !== "*").join(" ") || "other moves"}${st.wrong["*"] ? " + fallback" : ""}` : ""}${st.accept ? `, also accepts ${st.accept.join(" ")}` : ""}${st.anyMate ? ", any mate accepted" : ""}]` : " (auto-played)";
     const sym = st.tag ? ` ${TAGS[st.tag].symbol} (${TAGS[st.tag].label})` : "";
@@ -3905,7 +4021,8 @@ function describePuzzle(pz) {
 }
 function describeLesson(ls) {
   const tasks = ls.slides.filter((x) => x.task).length;
-  const lines = [`"${ls.title}"${ls.author ? ` by ${ls.author}` : ""}${ls.level ? ` (${ls.level})` : ""}: ${ls.slides.length} slide(s), ${tasks} task(s)${ls.primer ? ", with a primer" : ""}.`];
+  const langs = ls.langs && ls.langs.length > 1 ? ` Languages: ${ls.langs.join(", ")}.` : ls.lang && ls.lang !== "en" ? ` Language: ${ls.lang}.` : "";
+  const lines = [`"${textIn(ls.title, ls.lang, ls.lang)}"${ls.author ? ` by ${textIn(ls.author)}` : ""}${ls.level ? ` (${textIn(ls.level, ls.lang, ls.lang)})` : ""}:${langs} ${ls.slides.length} slide(s), ${tasks} task(s)${ls.primer ? ", with a primer" : ""}.`];
   ls.slides.forEach((s, i) => {
     const bits = [];
     if (s.moves.length)
@@ -3914,10 +4031,10 @@ function describeLesson(ls) {
       bits.push(`${s.arrows.length} arrow(s)`);
     if (s.highlights.length)
       bits.push(`${s.highlights.length} highlight(s)`);
-    lines.push(`  ${i + 1}. ${s.title || "(untitled)"}${bits.length ? ` [${bits.join(", ")}]` : ""}`);
+    lines.push(`  ${i + 1}. ${textIn(s.title, ls.lang, ls.lang) || "(untitled)"}${bits.length ? ` [${bits.join(", ")}]` : ""}`);
     if (s.task) {
       lines.push(`     task, ${s.task.solverColor === "w" ? "White" : "Black"} to move:`);
-      describePuzzle({ title: "", line: s.task.line, solverColor: s.task.solverColor }).split(`
+      describePuzzle({ title: "", line: s.task.line, solverColor: s.task.solverColor, lang: ls.lang }).split(`
 `).slice(1).forEach((l) => lines.push("     " + l));
     }
     lines.push(`     ends at FEN ${s.fenEnd}`);

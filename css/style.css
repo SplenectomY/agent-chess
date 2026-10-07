@@ -208,6 +208,7 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
   list-style: none; cursor: pointer; border: 1.5px solid var(--line); padding: 3px 10px; font-weight: 650; font-size: .92rem;
 }
 .style-menu summary::-webkit-details-marker { display: none; }
+.style-lang { color: var(--muted); font-size: .8em; font-weight: 650; letter-spacing: .03em; }
 .style-menu summary::after { content: ' ▾'; color: var(--muted); }
 .style-menu[open] summary { border-color: var(--ink); }
 .style-pop {
@@ -417,6 +418,14 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
   0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--signal) 70%, transparent); }
   70%, 100% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--signal) 0%, transparent); }
 }
+/* Retry after a wrong move: same place and size, but quiet slate instead of gold */
+.btn.retry { background: color-mix(in srgb, var(--ink) 7%, var(--surface)); border-color: var(--ink); color: var(--ink); font-weight: 750; animation: retry-pulse 2.6s ease-out infinite; }
+.btn.retry:hover { background: color-mix(in srgb, var(--ink) 13%, var(--surface)); }
+.btn.retry span { font-size: 1.1em; line-height: 1; }
+@keyframes retry-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--muted) 55%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--muted) 0%, transparent); }
+}
 .pz-progress:empty { display: none; }
 .pz-progress { margin: 0 0 14px; }
 .ls-inline-next { margin: 16px 0 0; }
@@ -578,4 +587,5 @@ details.panel[open] summary { margin-bottom: 10px; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
   .btn.go { box-shadow: 0 0 0 3px color-mix(in srgb, var(--signal) 45%, transparent); }
+  .btn.retry { box-shadow: 0 0 0 3px color-mix(in srgb, var(--muted) 40%, transparent); }
 }

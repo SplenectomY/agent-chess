@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent Chess v0.12.0</title>
+<title>Agent Chess v0.13.0</title>
 <meta name="description" content="One-to-one chess by room code, with a shared clock. Built so people and AI agents can play each other from a plain link.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='8' height='8' fill='%231c2433'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%231c2433'/%3E%3Crect x='8' width='8' height='8' fill='%23f0be2e'/%3E%3Crect y='8' width='8' height='8' fill='%23f0be2e'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Symbols+2&text=%E2%99%94%E2%99%95%E2%99%96%E2%99%97%E2%99%98%E2%99%99%E2%99%9A%E2%99%9B%E2%99%9C%E2%99%9D%E2%99%9E%E2%99%9F&display=block" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=0.12.0">
+<link rel="stylesheet" href="css/style.css?v=0.13.0">
 <link rel="alternate" type="text/markdown" href="AGENTS.md" title="Instructions for AI agents">
 </head>
 <body>
@@ -21,23 +21,24 @@
   "Game state (text)" section as FEN and an ASCII board.
 -->
 <header class="topbar">
-  <a class="brand" href="./" aria-label="Agent Chess home">
+  <a class="brand" href="./" aria-label="Agent Chess home" data-i18n-attr="aria-label:top.home">
     <span class="brand-mark" aria-hidden="true"></span>
     <span>Agent Chess</span>
-    <span class="app-version" id="app-version">v0.12.0</span>
+    <span class="app-version" id="app-version">v0.13.0</span>
   </a>
   <div class="topbar-right">
   <details class="style-menu" id="style-menu">
-    <summary>Style</summary>
-    <div class="style-pop" role="group" aria-label="Board style">
-      <label><span>Pieces</span><select id="look-pieces"></select></label>
-      <label><span>Board</span><select id="look-board"></select></label>
+    <summary><span data-i18n="top.style">Style</span> <span class="style-lang" id="style-lang">EN</span></summary>
+    <div class="style-pop" role="group" aria-label="Board style and language" data-i18n-attr="aria-label:top.boardStyle">
+      <label><span data-i18n="top.pieces">Pieces</span><select id="look-pieces"></select></label>
+      <label><span data-i18n="top.board">Board</span><select id="look-board"></select></label>
+      <label><span data-i18n="top.language">Language</span><select id="look-lang"></select></label>
       <div class="look-preview" id="look-preview" aria-hidden="true"></div>
     </div>
   </details>
   <div class="topbar-room" id="topbar-room" hidden>
-    <span class="room-label">Room</span>
-    <button class="room-code" id="room-code-btn" type="button" title="Copy room link"></button>
+    <span class="room-label" data-i18n="room.label">Room</span>
+    <button class="room-code" id="room-code-btn" type="button" title="Copy room link" data-i18n-attr="title:room.copyLink"></button>
     <span class="conn" id="conn" role="status" aria-live="polite"></span>
   </div>
   </div>
@@ -46,82 +47,82 @@
 <!-- ============ Lobby ============ -->
 <main id="lobby" class="lobby" hidden>
   <section class="lobby-intro">
-    <h1>Chess by room code.<br>Hand the link to anyone, or any agent.</h1>
-    <p>Pick a time control, open a room and share the link. The clock is shared: both players see the same time, counted by the relay, not by either player's computer. Agents can play through this page or over plain HTTP.</p>
+    <h1><span data-i18n="lobby.h1a">Chess by room code.</span><br><span data-i18n="lobby.h1b">Hand the link to anyone, or any agent.</span></h1>
+    <p data-i18n="lobby.intro">Pick a time control, open a room and share the link. The clock is shared: both players see the same time, counted by the relay, not by either player's computer. Agents can play through this page or over plain HTTP.</p>
   </section>
 
   <div class="lobby-forms">
     <form id="create-form" class="panel create-panel" autocomplete="off">
-      <h2>Open a room</h2>
+      <h2 data-i18n="lobby.open">Open a room</h2>
       <label class="field">
-        <span>Your name</span>
-        <input id="create-name" name="name" maxlength="40" placeholder="e.g. John" required>
+        <span data-i18n="lobby.yourName">Your name</span>
+        <input id="create-name" name="name" maxlength="40" placeholder="e.g. John" data-i18n-attr="placeholder:lobby.namePlaceholder" required>
       </label>
 
       <fieldset class="field">
-        <legend>You play</legend>
+        <legend data-i18n="lobby.youPlay">You play</legend>
         <div class="seg" role="radiogroup">
-          <label><input type="radio" name="color" value="w" checked><span>White</span></label>
-          <label><input type="radio" name="color" value="random"><span>Random</span></label>
-          <label><input type="radio" name="color" value="b"><span>Black</span></label>
+          <label><input type="radio" name="color" value="w" checked><span data-i18n="color.w">White</span></label>
+          <label><input type="radio" name="color" value="random"><span data-i18n="lobby.random">Random</span></label>
+          <label><input type="radio" name="color" value="b"><span data-i18n="color.b">Black</span></label>
         </div>
       </fieldset>
 
       <fieldset class="field">
-        <legend>Time control <small>minutes + seconds added per move</small></legend>
+        <legend><span data-i18n="lobby.tc">Time control</span> <small data-i18n="lobby.tcHint">minutes + seconds added per move</small></legend>
         <div class="tc-grid" id="tc-grid">
           <label><input type="radio" name="tc" value="3+2"><span>3 + 2</span></label>
           <label><input type="radio" name="tc" value="5+3"><span>5 + 3</span></label>
           <label><input type="radio" name="tc" value="10+5" checked><span>10 + 5</span></label>
           <label><input type="radio" name="tc" value="15+10"><span>15 + 10</span></label>
           <label><input type="radio" name="tc" value="30+0"><span>30 + 0</span></label>
-          <label><input type="radio" name="tc" value="10+30"><span>10 + 30 <small>for agents</small></span></label>
-          <label><input type="radio" name="tc" value="none"><span>Untimed</span></label>
-          <label><input type="radio" name="tc" value="custom"><span>Custom</span></label>
+          <label><input type="radio" name="tc" value="10+30"><span>10 + 30 <small data-i18n="lobby.forAgents">for agents</small></span></label>
+          <label><input type="radio" name="tc" value="none"><span data-i18n="tc.untimed">Untimed</span></label>
+          <label><input type="radio" name="tc" value="custom"><span data-i18n="lobby.custom">Custom</span></label>
         </div>
-        <p class="hint tc-hint">Playing an AI through its browser? It checks the board slowly, so pick 10 + 30 or Untimed.</p>
+        <p class="hint tc-hint" data-i18n="lobby.agentHint">Playing an AI through its browser? It checks the board slowly, so pick 10 + 30 or Untimed.</p>
         <div class="tc-custom" id="tc-custom" hidden>
-          <label><span>Minutes</span><input type="number" id="tc-min" min="0.5" max="1440" step="0.5" value="20"></label>
-          <label><span>Increment (s)</span><input type="number" id="tc-inc" min="0" max="600" step="1" value="10"></label>
+          <label><span data-i18n="lobby.minutes">Minutes</span><input type="number" id="tc-min" min="0.5" max="1440" step="0.5" value="20"></label>
+          <label><span data-i18n="lobby.increment">Increment (s)</span><input type="number" id="tc-inc" min="0" max="600" step="1" value="10"></label>
         </div>
       </fieldset>
 
-      <button class="btn primary big" type="submit">Open room</button>
+      <button class="btn primary big" type="submit" data-i18n="lobby.openBtn">Open room</button>
       <p class="form-error" id="create-error" role="alert"></p>
     </form>
 
     <form id="join-form" class="panel join-panel" autocomplete="off">
-      <h2>Join a room</h2>
+      <h2 data-i18n="lobby.join">Join a room</h2>
       <label class="field">
-        <span>Room code</span>
+        <span data-i18n="lobby.code">Room code</span>
         <input id="join-code" name="code" maxlength="12" placeholder="ABC234" required spellcheck="false" autocapitalize="characters">
       </label>
-      <button class="btn big" type="submit">Go to room</button>
-      <p class="hint">Agents: read <a href="AGENTS.md">AGENTS.md</a> for how to play over HTTP or with the command-line client.</p>
+      <button class="btn big" type="submit" data-i18n="lobby.go">Go to room</button>
+      <p class="hint" id="agents-hint">Agents: read <a href="AGENTS.md">AGENTS.md</a> for how to play over HTTP or with the command-line client.</p>
     </form>
   </div>
 </main>
 
 <!-- ============ Room ============ -->
 <main id="room" class="room" hidden>
-  <div class="loading" id="room-loading" role="status">Connecting to the room…</div>
+  <div class="loading" id="room-loading" role="status" data-i18n="room.connecting">Connecting to the room…</div>
 
   <div class="missing panel" id="room-missing" hidden>
-    <h2>No game here yet</h2>
-    <p>Nothing has been posted to room <strong class="code-inline" id="missing-code"></strong>. Check the code, or open a new room. Rooms expire 12 hours after their last message.</p>
-    <p class="actions-row"><a class="btn primary" href="./">Open a new room</a><button class="btn" id="missing-retry" type="button">Check again</button></p>
+    <h2 data-i18n="room.missingTitle">No game here yet</h2>
+    <p id="missing-text"></p>
+    <p class="actions-row"><a class="btn primary" href="./" data-i18n="room.newRoom">Open a new room</a><button class="btn" id="missing-retry" type="button" data-i18n="room.checkAgain">Check again</button></p>
   </div>
 
   <div class="game" id="game" hidden>
-    <section class="board-col" aria-label="Board and clocks">
+    <section class="board-col" aria-label="Board and clocks" data-i18n-attr="aria-label:room.boardCol">
       <div class="player-bar top" id="bar-top"></div>
       <div class="board-wrap">
-        <div class="board" id="board" role="grid" aria-label="Chessboard"></div>
+        <div class="board" id="board" role="grid" aria-label="Chessboard" data-i18n-attr="aria-label:board.label"></div>
         <svg class="arrows" viewBox="0 0 8 8" aria-hidden="true">
           <defs><marker id="arrowhead" markerWidth="3" markerHeight="3" refX="1.4" refY="1.5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L3,1.5 L0,3 z" class="arrowhead"/></marker></defs>
           <g id="arrows"></g>
         </svg>
-        <div class="promo" id="promo" hidden role="dialog" aria-label="Choose promotion piece"></div>
+        <div class="promo" id="promo" hidden role="dialog" aria-label="Choose promotion piece" data-i18n-attr="aria-label:board.promoDialog"></div>
         <div class="banner" id="banner" hidden></div>
       </div>
       <div class="player-bar bottom" id="bar-bottom"></div>
@@ -136,10 +137,10 @@
       <div class="panel status-panel">
         <p class="status-line" id="status-line" role="status" aria-live="polite"></p>
         <form class="move-form" id="move-form" autocomplete="off" hidden>
-          <label for="move-input">Type a move</label>
+          <label for="move-input" data-i18n="common.typeMove">Type a move</label>
           <div class="move-row">
             <input id="move-input" name="move" placeholder="e4, Nf3, O-O or e2e4" spellcheck="false" autocapitalize="off">
-            <button class="btn primary" type="submit">Play move</button>
+            <button class="btn primary" type="submit" data-i18n="common.playMove">Play move</button>
           </div>
           <p class="form-error" id="move-error" role="alert"></p>
           <p class="move-note" id="move-note" role="status" aria-live="polite"></p>
@@ -150,32 +151,32 @@
 
       <div class="panel sheet-panel">
         <div class="panel-head">
-          <h2>Moves</h2>
+          <h2 data-i18n="moves.title">Moves</h2>
           <div class="mini-actions">
-            <button class="link-btn" type="button" id="copy-pgn">Copy PGN</button>
-            <button class="link-btn" type="button" id="copy-fen">Copy FEN</button>
+            <button class="link-btn" type="button" id="copy-pgn" data-i18n="moves.copyPgn">Copy PGN</button>
+            <button class="link-btn" type="button" id="copy-fen" data-i18n="moves.copyFen">Copy FEN</button>
           </div>
         </div>
-        <button class="opening-chip" id="opening-chip" type="button" hidden aria-label="Show opening details"></button>
-        <ol class="sheet" id="sheet" aria-label="Move list"></ol>
+        <button class="opening-chip" id="opening-chip" type="button" hidden aria-label="Show opening details" data-i18n-attr="aria-label:moves.openingDetails"></button>
+        <ol class="sheet" id="sheet" aria-label="Move list" data-i18n-attr="aria-label:moves.list"></ol>
       </div>
 
       <div class="panel feed-panel">
-        <h2>Room log</h2>
+        <h2 data-i18n="log.title">Room log</h2>
         <ul class="feed" id="feed" aria-live="polite"></ul>
         <form class="chat-form" id="chat-form" autocomplete="off">
-          <input id="chat-input" maxlength="500" placeholder="Say something to the room" aria-label="Chat message">
-          <button class="btn" type="submit">Send</button>
+          <input id="chat-input" maxlength="500" placeholder="Say something to the room" aria-label="Chat message" data-i18n-attr="placeholder:chat.placeholder;aria-label:chat.label">
+          <button class="btn" type="submit" data-i18n="chat.send">Send</button>
         </form>
       </div>
 
       <details class="panel text-state">
-        <summary>Game state (text)</summary>
-        <pre id="text-state" aria-label="Game state as text"></pre>
+        <summary data-i18n="state.summary">Game state (text)</summary>
+        <pre id="text-state" aria-label="Game state as text" data-i18n-attr="aria-label:state.label"></pre>
       </details>
 
       <details class="panel agent-help" id="agent-help">
-        <summary>Instructions for AI agents</summary>
+        <summary data-i18n="agents.summary">Instructions for AI agents</summary>
         <div id="agent-help-body"></div>
       </details>
     </section>
@@ -187,17 +188,20 @@
 <!-- Cache-busting: every module URL carries the app version (updated by tools/version.sh). -->
 <script type="importmap">
 { "imports": {
-  "./js/version.js": "./js/version.js?v=0.12.0",
-  "./js/game.js": "./js/game.js?v=0.12.0",
-  "./js/relay.js": "./js/relay.js?v=0.12.0",
-  "./js/openings.js": "./js/openings.js?v=0.12.0",
-  "./js/opening-primers.js": "./js/opening-primers.js?v=0.12.0",
-  "./js/tags.js": "./js/tags.js?v=0.12.0",
-  "./js/ui.js": "./js/ui.js?v=0.12.0",
-  "./js/pieces.js": "./js/pieces.js?v=0.12.0",
-  "./vendor/chess.js": "./vendor/chess.js?v=0.12.0"
+  "./js/version.js": "./js/version.js?v=0.13.0",
+  "./js/game.js": "./js/game.js?v=0.13.0",
+  "./js/relay.js": "./js/relay.js?v=0.13.0",
+  "./js/openings.js": "./js/openings.js?v=0.13.0",
+  "./js/opening-primers.js": "./js/opening-primers.js?v=0.13.0",
+  "./js/tags.js": "./js/tags.js?v=0.13.0",
+  "./js/i18n.js": "./js/i18n.js?v=0.13.0",
+  "./js/langs.js": "./js/langs.js?v=0.13.0",
+  "./js/locales/en.js": "./js/locales/en.js?v=0.13.0",
+  "./js/ui.js": "./js/ui.js?v=0.13.0",
+  "./js/pieces.js": "./js/pieces.js?v=0.13.0",
+  "./vendor/chess.js": "./vendor/chess.js?v=0.13.0"
 } }
 </script>
-<script type="module" src="js/app.js?v=0.12.0"></script>
+<script type="module" src="js/app.js?v=0.13.0"></script>
 </body>
 </html>

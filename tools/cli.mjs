@@ -10,7 +10,8 @@ import * as G from '../js/game.js';
 import { Chess } from '../vendor/chess.js';
 import { DEFAULT_RELAY, topicFor, parseNtfyLine } from '../js/relay.js';
 import { tagKey } from '../js/tags.js';
-import { TAGS, validatePuzzle, toBase64Url, fromBase64Url, splitParts, joinParts, PUZZLE_TOPIC_PREFIX, ID_ALPHABET } from '../js/puzzle-core.js';
+import { langNameEnglish } from '../js/langs.js';
+import { textIn, TAGS, validatePuzzle, toBase64Url, fromBase64Url, splitParts, joinParts, PUZZLE_TOPIC_PREFIX, ID_ALPHABET } from '../js/puzzle-core.js';
 import { VERSION } from '../js/version.js';
 import { validateLesson, LESSON_TOPIC_PREFIX } from '../js/lesson-core.js';
 
@@ -63,6 +64,7 @@ Commands
 Options
   --id ID        Your player id (default: generated once per room and saved in ~/.agent-chess.json)
   --name NAME    Your display name
+  --lang CODE    Your language (e.g. es) for create/join; players see it, the CLI stays in English
   --relay URL    Relay server (default ${DEFAULT_RELAY})
   --json         Print machine-readable JSON instead of text
   --version      Print the version
@@ -295,7 +297,7 @@ async function cmdCreate() {
   }
   const id = opt.id || 'agent-' + randomBytes(6).toString('hex');
   saveId(code, { id, name });
-  const msgId = await publish(code, { type: 'create', id, name, color, time });
+  const msgId = await publish(code, { type: 'create', id, name, color, time, lang: opt.lang ? String(opt.lang) : undefined });
   const s = await settle(code, [], msgId);
   const link = `${SITE}?room=${code}${RELAY !== DEFAULT_RELAY ? `&relay=${encodeURIComponent(RELAY)}` : ''}`;
   if (JSON_OUT) console.log(JSON.stringify({ ok: true, room: code, link, you: color === 'w' ? 'white' : 'black', id }, null, 2));
@@ -319,7 +321,7 @@ async function cmdJoin() {
   if (s.players.w && s.players.b) die(`Room ${code} is full: ${s.players.w.name} vs ${s.players.b.name}. You can still watch with: state ${code}`);
   if (!name) die('Pass --name "YOUR NAME" to join.');
   saveId(code, { id, name });
-  const msgId = await publish(code, { type: 'join', id, name });
+  const msgId = await publish(code, { type: 'join', id, name, lang: opt.lang ? String(opt.lang) : undefined });
   const after = await settle(code, events, msgId);
   const seat = G.seatOf(after, id);
   if (!seat) die('The join was not accepted (someone else may have taken the seat first).');
@@ -381,9 +383,13 @@ async function cmdReview() {
   if (seat && a.requests.some((r) => r.color !== seat) && !(a.status && a.status.authorId === id)) {
     await publish(code, { type: 'analysis-status', id, game: g, state: 'working' });
   }
+  // Write the comments in the language of the player who'll read them.
+  const reader = seat ? rec.players[G.other(seat)] : null;
+  const readerLang = reader && reader.lang && reader.lang !== 'en' ? reader.lang : null;
   if (JSON_OUT) {
     console.log(JSON.stringify({
       ok: true, game: g, white: rec.players.w && rec.players.w.name, black: rec.players.b && rec.players.b.name,
+      commentLanguage: readerLang || 'en',
       you: seat ? G.colorName(seat).toLowerCase() : 'spectator', result: G.resultString(rec.result), reason: rec.result.reason,
       moves: rec.moves.map((m, i) => ({ at: G.plyLabel(i + 1), san: m.san, uci: m.uci, fenBefore: G.fenBefore(rec, i + 1), fenAfter: m.fen,
         comments: (a.notes[i + 1] || []).map((n) => ({ by: n.author, tag: n.tag, text: n.text, better: n.better && n.better.san })) })),
@@ -394,6 +400,7 @@ async function cmdReview() {
   }
   console.log(`Game ${g}: ${rec.players.w ? rec.players.w.name : 'White'} (White) vs ${rec.players.b ? rec.players.b.name : 'Black'} (Black) — ${G.resultString(rec.result)}, ${rec.result.reason}.`);
   if (seat) console.log(`You played ${G.colorName(seat)}.`);
+  if (readerLang) console.log(`${reader.name} reads ${langNameEnglish(readerLang)} (${readerLang}): write your comments and summary in ${langNameEnglish(readerLang)}.`);
   console.log('\nAT     MOVE      POSITION BEFORE THE MOVE (FEN)');
   rec.moves.forEach((m, i) => {
     const at = G.plyLabel(i + 1);
@@ -483,7 +490,8 @@ function readShareFile(kind, validate) {
 }
 
 function describePuzzle(pz) {
-  const lines = [`"${pz.title}"${pz.author ? ` by ${pz.author}` : ''}: ${pz.solverColor === 'w' ? 'White' : 'Black'} to solve, ${pz.line.filter((x) => x.solver).length} move(s) to find.`];
+  const langs = pz.langs && pz.langs.length > 1 ? ` Languages: ${pz.langs.join(', ')}.` : pz.lang && pz.lang !== 'en' ? ` Language: ${pz.lang}.` : '';
+  const lines = [`"${textIn(pz.title, pz.lang, pz.lang)}"${pz.author ? ` by ${textIn(pz.author)}` : ''}:${langs} ${pz.solverColor === 'w' ? 'White' : 'Black'} to solve, ${pz.line.filter((x) => x.solver).length} move(s) to find.`];
   pz.line.forEach((st, i) => {
     const extra = st.solver
       ? ` [${(st.hints || []).length} hint(s)${st.wrong ? `, explains ${Object.keys(st.wrong).filter((k) => k !== '*').join(' ') || 'other moves'}${st.wrong['*'] ? ' + fallback' : ''}` : ''}${st.accept ? `, also accepts ${st.accept.join(' ')}` : ''}${st.anyMate ? ', any mate accepted' : ''}]`
@@ -500,16 +508,17 @@ function describePuzzle(pz) {
 
 function describeLesson(ls) {
   const tasks = ls.slides.filter((x) => x.task).length;
-  const lines = [`"${ls.title}"${ls.author ? ` by ${ls.author}` : ''}${ls.level ? ` (${ls.level})` : ''}: ${ls.slides.length} slide(s), ${tasks} task(s)${ls.primer ? ', with a primer' : ''}.`];
+  const langs = ls.langs && ls.langs.length > 1 ? ` Languages: ${ls.langs.join(', ')}.` : ls.lang && ls.lang !== 'en' ? ` Language: ${ls.lang}.` : '';
+  const lines = [`"${textIn(ls.title, ls.lang, ls.lang)}"${ls.author ? ` by ${textIn(ls.author)}` : ''}${ls.level ? ` (${textIn(ls.level, ls.lang, ls.lang)})` : ''}:${langs} ${ls.slides.length} slide(s), ${tasks} task(s)${ls.primer ? ', with a primer' : ''}.`];
   ls.slides.forEach((s, i) => {
     const bits = [];
     if (s.moves.length) bits.push(`moves ${s.moves.map((m) => m.san).join(' ')}${s.tag ? ` ${TAGS[s.tag].symbol}` : ''}`);
     if (s.arrows.length) bits.push(`${s.arrows.length} arrow(s)`);
     if (s.highlights.length) bits.push(`${s.highlights.length} highlight(s)`);
-    lines.push(`  ${i + 1}. ${s.title || '(untitled)'}${bits.length ? ` [${bits.join(', ')}]` : ''}`);
+    lines.push(`  ${i + 1}. ${textIn(s.title, ls.lang, ls.lang) || '(untitled)'}${bits.length ? ` [${bits.join(', ')}]` : ''}`);
     if (s.task) {
       lines.push(`     task, ${s.task.solverColor === 'w' ? 'White' : 'Black'} to move:`);
-      describePuzzle({ title: '', line: s.task.line, solverColor: s.task.solverColor }).split('\n').slice(1).forEach((l) => lines.push('     ' + l));
+      describePuzzle({ title: '', line: s.task.line, solverColor: s.task.solverColor, lang: ls.lang }).split('\n').slice(1).forEach((l) => lines.push('     ' + l));
     }
     lines.push(`     ends at FEN ${s.fenEnd}`);
   });

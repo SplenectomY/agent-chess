@@ -6,8 +6,15 @@ import { Chess } from '../vendor/chess.js';
 import { el } from './ui.js';
 import { TAGS } from './tags.js';
 import { judgeMove, wrongEntry } from './puzzle-core.js';
+import { t, lang, loc, colorName } from './i18n.js';
 
-export const COLOR = { w: 'White', b: 'Black' };
+// Kept for older callers; prefer colorName() so names follow the interface language.
+export const COLOR = { get w() { return colorName('w'); }, get b() { return colorName('b'); } };
+const joinWords = (list) => {
+  try { return new Intl.ListFormat(lang(), { type: 'disjunction' }).format(list); } catch { return list.join(', '); }
+};
+// Feedback messages are built when shown, so they follow a language switch.
+const sp = (...parts) => () => parts.map((p) => (typeof p === 'function' ? p() : p)).filter(Boolean).join(' ');
 const UCI = /^([a-h][1-8])([a-h][1-8])([qrbn])?$/;
 
 export class Solver {
@@ -85,9 +92,10 @@ export class Solver {
       // The tag belongs to the intended move; an accepted alternative gets no symbol.
       this.badge = step.tag && mv.san === step.move ? { sq: mv.to, tag: step.tag } : null;
       this.replyArrows = step.replies || [];
-      const alt = mv.san !== step.move ? ` (${step.move} also works.)` : '';
-      this.feedback.push({ kind: 'good', tag: this.badge && step.tag, text: `${mv.san}: correct!${alt}${step.explain ? ' ' + step.explain : ''}` });
-      if (step.replies) this.feedback.push({ kind: 'reply', text: this.repliesText(step.replies) });
+      const san = mv.san;
+      this.feedback.push({ kind: 'good', tag: this.badge && step.tag, msg: sp(() => t('sv.correct', { san }),
+        san !== step.move ? () => t('sv.alsoWorks', { move: step.move }) : null, () => loc(step.explain)) });
+      if (step.replies) this.feedback.push({ kind: 'reply', msg: () => this.repliesText(step.replies) });
       this.step++;
       if (step.replies && this.step < this.line.length) {
         this.paused = true; // let the player study the arrows; Continue plays the reply
@@ -102,8 +110,9 @@ export class Solver {
       this.flash = { from: mv.from, to: mv.to };
       const w = wrongEntry(step, mv.san) || {};
       this.wrongInfo = { tag: w.tag, replies: w.replies };
-      const opener = w.tag === 'better-available' ? `${mv.san} is a good move, but there's a better one.` : `${mv.san} isn't it.`;
-      this.feedback.push({ kind: 'bad', tag: w.tag, text: `${opener}${w.text ? ' ' + w.text : ''}${w.replies ? ' ' + this.repliesText(w.replies) : ''} Press Retry when you're ready to try again.` });
+      const san = mv.san;
+      this.feedback.push({ kind: 'bad', tag: w.tag, msg: sp(() => t(w.tag === 'better-available' ? 'sv.goodNotBest' : 'sv.notIt', { san }),
+        () => loc(w.text), w.replies ? () => this.repliesText(w.replies) : null, () => t('sv.retryPrompt')) });
     }
     this.onChange();
   }
@@ -127,7 +136,9 @@ export class Solver {
       this.last = { from: mv.from, to: mv.to };
       this.badge = next.tag ? { sq: mv.to, tag: next.tag } : null;
       this.replyArrows = [];
-      this.feedback.push({ kind: 'reply', tag: next.tag, text: `${COLOR[mv.color]} replies ${mv.san}.${next.explain ? ' ' + next.explain : ''}` });
+      const color = mv.color;
+      const san = mv.san;
+      this.feedback.push({ kind: 'reply', tag: next.tag, msg: sp(() => t('sv.opponentReplies', { color, san }), () => loc(next.explain)) });
       this.step++;
       this.busy = false;
       this.advance();
@@ -143,11 +154,13 @@ export class Solver {
     if (shown < hints.length) {
       this.hintLevel[i] = shown + 1;
       this.hintsUsed++;
-      this.feedback.push({ kind: 'hint', text: `Hint ${shown + 1}${hints.length > 1 ? ` of ${hints.length}` : ''}: ${hints[shown]}` });
+      const h = hints[shown];
+      const total = hints.length;
+      this.feedback.push({ kind: 'hint', msg: () => (total > 1 ? t('sv.hintOf', { i: shown + 1, n: total, text: loc(h) }) : t('sv.hintOne', { text: loc(h) })) });
     } else if (!this.revealed[i]) {
       this.revealed[i] = true;
       this.arrow = { from: step.from, to: step.to };
-      this.feedback.push({ kind: 'hint', text: `The answer is ${step.move} (shown by the arrow). Play it to continue.` });
+      this.feedback.push({ kind: 'hint', msg: () => t('sv.answer', { move: step.move }) });
     }
     this.onChange();
   }
@@ -156,15 +169,13 @@ export class Solver {
     const step = this.line[this.step];
     const hints = (step && step.hints) || [];
     const shown = this.hintLevel[this.step] || 0;
-    return shown < hints.length ? (shown ? 'Another hint' : 'Hint') : this.revealed[this.step] ? 'Answer shown' : 'Show the answer';
+    return shown < hints.length ? t(shown ? 'sv.anotherHint' : 'sv.hint') : t(this.revealed[this.step] ? 'sv.answerShown' : 'sv.showAnswer');
   }
 
   // "Black can answer Rxc8 (forced) or Kf8: see the green arrows."
   repliesText(list) {
-    const names = list.map((r) => r.san + (r.text ? ` (${r.text})` : ''));
-    const joined = names.length > 1 ? `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}` : names[0];
-    const side = COLOR[this.solverColor === 'w' ? 'b' : 'w'];
-    return `${side} can answer ${joined}: see the green arrow${list.length > 1 ? 's' : ''}.`;
+    const names = list.map((r) => r.san + (r.text ? ` (${loc(r.text)})` : ''));
+    return t('sv.replies', { color: this.solverColor === 'w' ? 'b' : 'w', moves: joinWords(names), n: list.length });
   }
 
   // Play the opponent's reply after the player has looked at the reply arrows.
@@ -186,11 +197,11 @@ export class Solver {
   }
 
   statusText() {
-    if (this.solved) return 'Solved!';
-    if (this.wrongChess) return 'Not quite. Press Retry to take it back.';
-    if (this.paused) return 'Look at the replies, then press Continue.';
-    if (this.busy) return `${COLOR[this.chess.turn()]} is replying…`;
-    return `${COLOR[this.solverColor]} to move`;
+    if (this.solved) return t('pz.solved');
+    if (this.wrongChess) return t('sv.statusWrong');
+    if (this.paused) return t('sv.statusPaused');
+    if (this.busy) return t('sv.statusReplying', { color: this.chess.turn() });
+    return t('sv.toMove', { color: this.solverColor });
   }
 
   // Plain-text state for agents and screen readers.
@@ -208,25 +219,29 @@ export class Solver {
 // The newest few feedback messages, with tag chips.
 export function renderFeedback(box, feedback, emptyText) {
   box.replaceChildren(...feedback.slice(-4).map((f) => el('p', { class: `fb ${f.kind}` },
-    f.tag ? el('span', { class: `rv-tag tag-${f.tag}` }, el('b', { text: TAGS[f.tag].symbol }), ` ${TAGS[f.tag].label}`) : null,
-    f.tag ? ' ' : null, f.text)));
+    f.tag ? el('span', { class: `rv-tag tag-${f.tag}` }, el('b', { text: TAGS[f.tag].symbol }), ` ${t(`tag.${f.tag}`)}`) : null,
+    f.tag ? ' ' : null, f.msg ? f.msg() : f.text)));
   if (!feedback.length && emptyText) box.replaceChildren(el('p', { class: 'fb info', text: emptyText }));
 }
 
 // The Continue button, shown right under the explanation while the reply arrows are up
 // (the caller puts it above the move box). Empty when there's nothing to continue.
-export function continueButton(S) {
+export function continueButton(S, { onRetry } = {}) {
+  // After a wrong move: Retry sits in the same spot, right under the explanation, with a
+  // quieter (not gold) pulse.
+  if (S.wrongChess) {
+    return [el('button', { class: 'btn retry wide', type: 'button', id: 'pz-retry', onclick: () => { S.retry(); if (onRetry) onRetry(); } },
+      el('span', { 'aria-hidden': 'true', text: '↺' }), t('sv.retry'))];
+  }
   if (!S.paused) return [];
-  const side = COLOR[S.chess.turn()];
   return [el('button', { class: 'btn go wide', type: 'button', id: 'pz-continue', onclick: () => S.cont() },
-    `Continue: see ${side}'s reply`, el('span', { 'aria-hidden': 'true', text: '▶' }))];
+    t('sv.continue', { color: S.chess.turn() }), el('span', { 'aria-hidden': 'true', text: '▶' }))];
 }
 
 // Retry / Hint buttons for an unsolved solver.
 export function solverButtons(S, { onRetry } = {}) {
   const out = [];
   if (S.solved) return out;
-  if (S.wrongChess) out.push(el('button', { class: 'btn primary', type: 'button', text: 'Retry', id: 'pz-retry', onclick: () => { S.retry(); if (onRetry) onRetry(); } }));
   if (!S.paused && !S.wrongChess) {
     out.push(el('button', { class: 'btn', type: 'button', text: S.hintLabel(), id: 'pz-hint', disabled: !S.canMove() || !!S.revealed[S.step], onclick: () => S.hint() }));
   }

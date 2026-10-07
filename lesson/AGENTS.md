@@ -67,6 +67,7 @@ A lesson can be a pure slideshow (no tasks at all), or mostly practice, or anyth
 | field | meaning |
 |---|---|
 | `title`, `author`, `level` | Short text shown at the top. `level` is free text such as "Beginner". |
+| `lang` | The language of plain-string texts, like `"es"` (default `"en"`). See **Languages**. |
 | `primer` | The introduction, shown in the "About this lesson" box. Formatting below. Up to 8000 characters. |
 | `fen` | Starting position for the first slide. Default: the normal starting position. |
 | `orientation` | `"w"` (default) or `"b"`: which side is at the bottom of the board. |
@@ -115,7 +116,16 @@ On the last player move of a task, any checkmate counts as correct.
 
 ### Text formatting
 
-`primer`, `text`, `prompt`, `done` and `conclusion` support a little Markdown: a blank line starts a new paragraph, lines starting with `- ` make a list, a line starting with `### ` is a heading, and `**bold**`, `*italic*` and `` `code` `` work inside text. Nothing else (no links, no HTML). In JSON, write line breaks as `\n`.
+`primer`, `text`, `prompt`, `done` and `conclusion` (in every language) support a little Markdown: a blank line starts a new paragraph, lines starting with `- ` make a list, a line starting with `### ` is a heading, and `**bold**`, `*italic*` and `` `code` `` work inside text. Nothing else (no links, no HTML). In JSON, write line breaks as `\n`.
+
+## Languages
+
+Write for the person who asked, in their language. Every text field (`title`, `intro`/`primer`, `text`, `prompt`, `done`, `hints`, `explain`, `wrong` texts, `replies` notes, `conclusion`) can be either:
+
+- a plain string in one language, with `"lang"` at the top saying which (default `"en"`), or
+- a map with one entry per language, to serve several at once: `"explain": { "en": "Back-rank mate.", "es": "Mate del pasillo." }`. A `wrong` entry with a tag looks like `{ "text": { "en": "…", "es": "…" }, "tag": "blunder" }`.
+
+The page shows each text in the viewer's interface language when it's there, otherwise in the `lang` language, otherwise English. If the viewer hasn't picked a language, the interface itself switches to match the lesson when their browser language isn't available, so text and buttons agree. The interface comes in en, es, fr, de, it, pt, ru, zh and ja; content can use any language code. `lesson check` lists the languages and warns when some texts are missing a translation that others have. Keep moves in standard notation (`Nf3`, `O-O`) in every language. The example puzzle `puzzle/examples/back-rank.json` shows a two-language file.
 
 ## 3. Turn it into a link
 

@@ -2,11 +2,38 @@ import { Chess } from '../vendor/chess.js';
 import * as G from './game.js';
 import { Relay, DEFAULT_RELAY, topicFor } from './relay.js';
 import { VERSION } from './version.js';
-import { $, el, store, toast, copy, pieceNode, PIECE_NAME, applyLook, wireStyleMenu } from './ui.js';
+import { $, el, store, toast, copy, pieceNode, applyLook, wireStyleMenu } from './ui.js';
 import { loadOpenings, identify, ecoVolume } from './openings.js';
 import { primerFor } from './opening-primers.js';
+import { t, colorName as cName, timeControl, pieceName, setLang, chooseLang, onLangChange, wireLangPicker, lang } from './i18n.js';
+import { langNameEnglish } from './langs.js';
 
-const APP_TITLE = `Agent Chess v${VERSION}`;
+const appTitle = () => t('title.app', { v: VERSION });
+const pName = (s, c) => (s.players[c] ? s.players[c].name : cName(c));
+const tagLabel = (tag) => t(`tag.${tag}`);
+// Result reason in the viewer's language (older logs without a code keep their English text).
+const reasonText = (r) => (r.code ? t(`reason.${r.code}`, r.vars || {}) : r.reason);
+// A room-log line in the viewer's language.
+function logText(f) {
+  if (!f.key) return f.text;
+  const v = { ...(f.vars || {}) };
+  if (v.code) v.reason = t(`reason.${v.code}`, v);
+  if ('tc' in v) v.tc = timeControl(v.tc);
+  return t(`log.${f.key}`, v);
+}
+// Translate a template and put DOM nodes where its {placeholders} are (links, bold text).
+function tNodes(key, nodes = {}, vars = {}) {
+  const text = t(key, vars);
+  const out = [];
+  let at = 0;
+  for (const m of text.matchAll(/\{(\w+)\}/g)) {
+    if (!(m[1] in nodes)) continue;
+    out.push(text.slice(at, m.index), nodes[m[1]]);
+    at = m.index + m[0].length;
+  }
+  out.push(text.slice(at));
+  return out.filter((x) => x !== '');
+}
 
 
 const params = new URLSearchParams(location.search);
@@ -66,8 +93,9 @@ function renderCaptures(chess) {
       if (!cur || cur.type !== t) groups.push((cur = { type: t, n: 0 }));
       cur.n++;
     }
-    const words = groups.map((g) => `${g.n > 1 ? g.n + ' ' : ''}${PIECE_NAME[g.type]}${g.n > 1 ? 's' : ''}`).join(', ');
-    box.setAttribute('aria-label', list.length ? `Captured by ${G.colorName(c)}: ${words}${lead > 0 ? `, up ${lead}` : ''}` : `${G.colorName(c)} has captured nothing`);
+    const words = groups.map((g) => `${pieceName(g.type)}${g.n > 1 ? ` ×${g.n}` : ''}`).join(', ');
+    const listText = lead > 0 ? t('cap.up', { text: words, n: lead }) : words;
+    box.setAttribute('aria-label', list.length ? t('cap.by', { color: c, list: listText }) : t('cap.none', { color: c }));
     box.replaceChildren(
       ...groups.map((g) => el('span', { class: 'cap-group' }, ...Array.from({ length: g.n }, () => pieceNode(victim, g.type, 'cap-piece')))),
       ...(lead > 0 ? [el('span', { class: 'cap-lead', text: `+${lead}` })] : []),
@@ -124,7 +152,7 @@ function showLobby() {
       const min = Number($('tc-min').value);
       const inc = Number($('tc-inc').value);
       if (!(min > 0)) {
-        $('create-error').textContent = 'Enter the minutes per player, for example 20.';
+        $('create-error').textContent = t('lobby.errMinutes');
         return;
       }
       time = { initial: Math.round(min * 60), increment: Math.max(0, Math.round(inc || 0)) };
@@ -135,7 +163,7 @@ function showLobby() {
     const code = randomString(6);
     const id = 'p-' + randomString(12, 'abcdefghijklmnopqrstuvwxyz0123456789');
     store.set(`agentchess:seat:${code}`, { id, name });
-    enterRoom(code, { create: { v: G.PROTOCOL_VERSION, type: 'create', id, name, color, time } });
+    enterRoom(code, { create: { v: G.PROTOCOL_VERSION, type: 'create', id, name, color, time, lang: lang() } });
   });
 
   $('join-form').addEventListener('submit', (e) => {
@@ -186,7 +214,7 @@ async function publish(data) {
     await R.relay.publish({ v: G.PROTOCOL_VERSION, ...data });
     return true;
   } catch (err) {
-    toast(err.message || 'Could not send. Try again.');
+    toast(t('room.sendFailed'));
     return false;
   }
 }
@@ -199,8 +227,8 @@ async function enterRoom(code, { create = null } = {}) {
   $('room').hidden = false;
   $('topbar-room').hidden = false;
   $('room-code-btn').textContent = code;
-  $('room-code-btn').onclick = () => copy(roomUrl(code), 'Room link copied');
-  document.title = `Room ${code} — ${APP_TITLE}`;
+  $('room-code-btn').onclick = () => copy(roomUrl(code), t('room.linkCopied'));
+  document.title = `${t('title.room', { code })} — ${appTitle()}`;
   wireRoomControls();
   renderAgentHelp();
   loadOpenings(`data/openings.json?v=${VERSION}`).then(() => { if (R.loaded) render(); });
@@ -219,24 +247,24 @@ async function enterRoom(code, { create = null } = {}) {
     onStatus: (st) => {
       const c = $('conn');
       c.dataset.state = st;
-      c.textContent = { live: 'Live', connecting: 'Connecting', reconnecting: 'Reconnecting', polling: 'Live (polling)' }[st] || st;
-      c.title = st === 'polling' ? 'The live stream is blocked on this network or browser, so the page checks for new moves every few seconds.' : '';
+      R.connState = st;
+      renderConn();
     },
   });
 
   try {
     await R.relay.start();
   } catch (err) {
-    $('room-loading').textContent = `Couldn't reach the relay at ${RELAY}. Check your connection, then reload the page.`;
+    $('room-loading').textContent = t('room.unreachable', { relay: RELAY });
     return;
   }
   R.loaded = true;
   if (create) {
     R.creating = true;
-    $('room-loading').textContent = 'Opening the room…';
+    $('room-loading').textContent = t('room.opening');
     const ok = await publish(create);
     if (!ok) {
-      $('room-loading').textContent = 'The room could not be opened. Reload to try again.';
+      $('room-loading').textContent = t('room.openFailed');
       return;
     }
   }
@@ -283,7 +311,7 @@ function render() {
     if (R.creating) return;
     $('room-loading').hidden = true;
     $('room-missing').hidden = false;
-    $('missing-code').textContent = R.code;
+    $('missing-text').replaceChildren(...tNodes('room.missingText', { code: el('strong', { class: 'code-inline', text: R.code }) }));
     $('game').hidden = true;
     return;
   }
@@ -312,15 +340,15 @@ function renderBars() {
     const s = R.s;
     const p = s.players[color];
     const mine = seat() === color;
-    const name = p ? p.name + (mine ? ' (you)' : '') : 'Open seat';
+    const name = p ? (mine ? t('bar.you', { name: p.name }) : p.name) : t('bar.open');
     const bar = $(slot);
     bar.replaceChildren(
       el('div', { class: 'pb-who' },
         el('span', { class: 'pb-name' }, el('span', { class: `pb-swatch pb-swatch-inline ${color}`, 'aria-hidden': 'true' }), name),
-        el('span', { class: 'pb-meta' }, el('span', { class: `pb-swatch ${color}` }), G.colorName(color))),
+        el('span', { class: 'pb-meta' }, el('span', { class: `pb-swatch ${color}` }), cName(color))),
       el('div', { class: 'pb-captures', 'data-color': color, role: 'img' }),
-      el('div', { class: 'clock' + (s.clock ? '' : ' untimed'), 'data-color': color, role: 'timer', 'aria-label': `${G.colorName(color)} clock` },
-        s.clock ? '' : 'No clock'),
+      el('div', { class: 'clock' + (s.clock ? '' : ' untimed'), 'data-color': color, role: 'timer', 'aria-label': t('bar.clock', { color }) },
+        s.clock ? '' : t('bar.noClock')),
     );
   }
 }
@@ -331,27 +359,27 @@ function tick() {
   const now = serverNow();
   const clk = G.clockAt(s, now);
   const active = G.isActive(s);
-  const t = G.turn(s);
+  const side = G.turn(s);
   document.querySelectorAll('.clock[data-color]').forEach((node) => {
     if (!clk) return;
     const c = node.dataset.color;
     const ms = clk[c];
     node.textContent = G.formatClock(ms);
-    node.classList.toggle('running', active && t === c);
+    node.classList.toggle('running', active && side === c);
     node.classList.toggle('low', ms < 20000);
     node.classList.toggle('flagged', ms <= 0);
   });
   // Claim a win on time when the side to move is past zero (players only).
   if (clk && active && seat()) {
     const key = `${s.game}:${s.moves.length}`;
-    if (clk[t] < -(G.GRACE_MS + 700) && (R.flagSent.key !== key || Date.now() - R.flagSent.at > 4000)) {
+    if (clk[side] < -(G.GRACE_MS + 700) && (R.flagSent.key !== key || Date.now() - R.flagSent.at > 4000)) {
       R.flagSent = { key, at: Date.now() };
       publish({ type: 'flag', id: R.me.id, game: s.game });
     }
   }
-  const myTurn = active && seat() === t;
-  const title = `Room ${R.code} — ${APP_TITLE}`;
-  document.title = myTurn ? `● Your move — ${title}` : title;
+  const myTurn = active && seat() === side;
+  const title = `${t('title.room', { code: R.code })} — ${appTitle()}`;
+  document.title = myTurn ? `${t('title.yourMove')} — ${title}` : title;
 }
 
 // ---------- board ----------
@@ -408,7 +436,7 @@ function renderBoard() {
         tgt && 'target', tgt && (piece || tgt.flags.includes('e')) && 'capture',
         checkSq === sq && 'check',
         canMove() && piece && piece.color === mySeat && 'movable'].filter(Boolean).join(' ');
-      const label = piece ? `${sq}, ${piece.color === 'w' ? 'white' : 'black'} ${PIECE_NAME[piece.type]}` : sq;
+      const label = piece ? t('board.square', { sq, piece: t(`piece.${piece.color}.${piece.type}`) }) : sq;
       const node = el('button', { class: cls, type: 'button', 'data-sq': sq, 'aria-label': label, tabindex: '-1' });
       if (piece) node.append(pieceNode(piece.color, piece.type));
       if (badgeTag && last && last.to === sq) {
@@ -449,17 +477,17 @@ function renderBoard() {
   const banner = $('banner');
   if (s.result) {
     const res = G.resultString(s.result);
-    const head = s.result.winner ? `${G.playerName(s, s.result.winner)} wins` : 'Draw';
+    const head = s.result.winner ? t('res.wins', { name: pName(s, s.result.winner) }) : t('res.draw');
     const count = G.noteCount(s, s.game);
-    banner.replaceChildren(
+    banner.replaceChildren(...[
       el('strong', { text: `${res.replace('1/2-1/2', '½–½')}` }),
-      el('div', { text: `${head} · ${s.result.reason}` }),
+      el('div', { text: `${head} · ${reasonText(s.result)}` }),
       analysisStatusNode(analysisWaitStatus(s.game), true),
       el('div', { class: 'banner-actions' },
         analysisButton(),
-        el('button', { class: 'btn on-dark', type: 'button', text: count ? `Review game (${count} comment${count === 1 ? '' : 's'})` : 'Review game', onclick: () => startReview() }),
-        el('button', { class: 'link-btn', type: 'button', text: 'Hide', style: 'color:inherit', onclick: () => (banner.hidden = true) })),
-    );
+        el('button', { class: 'btn on-dark', type: 'button', text: count ? t('act.reviewCount', { n: count }) : t('act.review'), onclick: () => startReview() }),
+        el('button', { class: 'link-btn', type: 'button', text: t('act.hide'), style: 'color:inherit', onclick: () => (banner.hidden = true) })),
+    ].filter(Boolean));
   }
   if (R.review) banner.hidden = true;
 }
@@ -490,7 +518,7 @@ function askPromotion(from, to) {
   const box = $('promo');
   const color = seat();
   box.replaceChildren(...['q', 'r', 'b', 'n'].map((p) =>
-    el('button', { type: 'button', 'aria-label': `Promote to ${PIECE_NAME[p]}`, onclick: () => { box.hidden = true; sendMove(from + to + p); } },
+    el('button', { type: 'button', 'aria-label': t('board.promote', { piece: pieceName(p) }), onclick: () => { box.hidden = true; sendMove(from + to + p); } },
       pieceNode(color, p))));
   box.hidden = false;
   box.querySelector('button').focus();
@@ -503,12 +531,12 @@ async function sendMove(text) {
   err.textContent = '';
   $('move-note').textContent = '';
   if (!canMove()) {
-    err.textContent = G.isActive(s) ? "It isn't your move." : 'The game is not in progress.';
+    err.textContent = G.isActive(s) ? t('err.notYourMove') : t('err.notInProgress');
     return false;
   }
   const mv = G.previewMove(s, text);
   if (!mv) {
-    err.textContent = `"${text}" isn't a legal move here. Use SAN like Nf3 or squares like g1f3.`;
+    err.textContent = t('err.illegal', { move: text });
     return false;
   }
   const uci = mv.from + mv.to + (mv.promotion || '');
@@ -518,7 +546,7 @@ async function sendMove(text) {
   renderStatus();
   click();
   const ok = await publish({ type: 'move', id: R.me.id, game: s.game, ply: s.moves.length, uci, san: mv.san, fen: mv.after });
-  $('move-note').textContent = ok ? `Played ${mv.san}.` : '';
+  $('move-note').textContent = ok ? t('note.played', { san: mv.san }) : '';
   if (!ok) {
     R.pending = null;
     renderBoard();
@@ -637,21 +665,21 @@ function renderStatus() {
   const me = seat();
   const line = $('status-line');
   const active = G.isActive(s);
-  const t = G.turn(s);
+  const tn = G.turn(s);
   line.replaceChildren();
   if (!s.started) {
-    line.textContent = me ? 'Waiting for your opponent to join. Share the room link.' : 'Waiting for a second player.';
+    line.textContent = me ? t('st.waitingYou') : t('st.waiting');
   } else if (s.result) {
-    const head = s.result.winner ? `${G.playerName(s, s.result.winner)} wins` : 'Drawn';
-    line.textContent = `Game over: ${head} (${s.result.reason}).`;
+    const head = s.result.winner ? t('res.wins', { name: pName(s, s.result.winner) }) : t('res.draw');
+    line.textContent = t('st.over', { head, reason: reasonText(s.result) });
   } else if (me && R.pending) {
-    line.textContent = 'Sending your move…';
-  } else if (me && me === t) {
-    line.append(el('span', { class: 'your-move', text: 'Your move' }), s.chess.inCheck() ? ' — you are in check.' : '');
+    line.textContent = t('st.sending');
+  } else if (me && me === tn) {
+    line.append(el('span', { class: 'your-move', text: t('st.yourMove') }), s.chess.inCheck() ? t('st.inCheck') : '');
   } else if (me) {
-    line.textContent = `Waiting for ${G.playerName(s, t)} to move.`;
+    line.textContent = t('st.waitingFor', { name: pName(s, tn) });
   } else {
-    line.textContent = `You're watching. ${G.playerName(s, t)} (${G.colorName(t)}) to move.`;
+    line.textContent = t('st.watching', { name: pName(s, tn), color: tn });
   }
 
   $('move-form').hidden = !(me && active);
@@ -663,9 +691,9 @@ function renderStatus() {
   if (me && active && s.drawOffer === G.other(me)) {
     offer.hidden = false;
     offer.replaceChildren(
-      el('p', { text: `${G.playerName(s, s.drawOffer)} offers a draw.` }),
-      el('button', { class: 'btn primary', type: 'button', text: 'Accept draw', onclick: () => publish({ type: 'accept-draw', id: R.me.id, game: s.game }) }),
-      el('button', { class: 'btn', type: 'button', text: 'Decline', onclick: () => publish({ type: 'decline-draw', id: R.me.id, game: s.game }) }),
+      el('p', { text: t('draw.offers', { name: pName(s, s.drawOffer) }) }),
+      el('button', { class: 'btn primary', type: 'button', text: t('draw.accept'), onclick: () => publish({ type: 'accept-draw', id: R.me.id, game: s.game }) }),
+      el('button', { class: 'btn', type: 'button', text: t('draw.decline'), onclick: () => publish({ type: 'decline-draw', id: R.me.id, game: s.game }) }),
     );
   } else offer.hidden = true;
 
@@ -673,9 +701,9 @@ function renderStatus() {
   const btns = [];
   if (me && active) {
     const offered = s.drawOffer === me;
-    btns.push(el('button', { class: 'btn', type: 'button', disabled: offered, text: offered ? 'Draw offered' : 'Offer draw',
+    btns.push(el('button', { class: 'btn', type: 'button', disabled: offered, text: offered ? t('act.drawOffered') : t('act.offerDraw'),
       onclick: () => publish({ type: 'offer-draw', id: R.me.id, game: s.game }) }));
-    btns.push(el('button', { class: 'btn danger', type: 'button', text: R.resignArmed ? 'Confirm resign' : 'Resign',
+    btns.push(el('button', { class: 'btn danger', type: 'button', text: R.resignArmed ? t('act.confirmResign') : t('act.resign'),
       onclick: () => {
         if (!R.resignArmed) {
           R.resignArmed = true;
@@ -687,7 +715,7 @@ function renderStatus() {
         }
       } }));
     if (s.clock) {
-      btns.push(el('button', { class: 'btn', type: 'button', text: 'Give 15 s', title: 'Add 15 seconds to your opponent\'s clock',
+      btns.push(el('button', { class: 'btn', type: 'button', text: t('act.give15'), title: t('act.give15Title'),
         onclick: () => publish({ type: 'add-time', id: R.me.id, game: s.game, seconds: 15 }) }));
     }
   }
@@ -695,13 +723,13 @@ function renderStatus() {
     const asked = s.rematch[me];
     const theyAsked = s.rematch[G.other(me)];
     btns.push(el('button', { class: 'btn primary', type: 'button', disabled: asked,
-      text: asked ? 'Rematch requested' : theyAsked ? 'Accept rematch' : 'Rematch',
+      text: asked ? t('act.rematchRequested') : theyAsked ? t('act.acceptRematch') : t('act.rematch'),
       onclick: () => publish({ type: 'rematch', id: R.me.id, game: s.game }) }));
     btns.push(analysisButton('btn'));
-    btns.push(el('a', { class: 'btn', href: './', text: 'New room' }));
+    btns.push(el('a', { class: 'btn', href: './', text: t('act.newRoom') }));
   }
-  if (s.result && !R.review) btns.push(el('button', { class: 'btn', type: 'button', text: 'Review game', onclick: () => startReview() }));
-  btns.push(el('button', { class: 'btn', type: 'button', text: 'Flip board', onclick: () => { R.userFlip = !R.userFlip; renderBars(); renderBoard(); tick(); } }));
+  if (s.result && !R.review) btns.push(el('button', { class: 'btn', type: 'button', text: t('act.review'), onclick: () => startReview() }));
+  btns.push(el('button', { class: 'btn', type: 'button', text: t('act.flip'), onclick: () => { R.userFlip = !R.userFlip; renderBars(); renderBoard(); tick(); } }));
   acts.replaceChildren(...btns.filter(Boolean));
 }
 
@@ -717,7 +745,7 @@ function renderSeatPanel() {
   panel.dataset.free = free;
   panel.hidden = false;
   const host = s.players[G.other(free)];
-  const nameInput = el('input', { id: 'seat-name', maxlength: '40', placeholder: 'Your name', required: true, value: store.get('agentchess:name') || '' });
+  const nameInput = el('input', { id: 'seat-name', maxlength: '40', placeholder: t('lobby.yourName'), required: true, value: store.get('agentchess:name') || '' });
   const form = el('form', { autocomplete: 'off', onsubmit: async (e) => {
     e.preventDefault();
     const name = nameInput.value.trim();
@@ -727,16 +755,16 @@ function renderSeatPanel() {
     R.me = { id, name };
     store.set(`agentchess:seat:${R.code}`, R.me);
     form.querySelector('button').disabled = true;
-    const ok = await publish({ type: 'join', id, name });
+    const ok = await publish({ type: 'join', id, name, lang: lang() });
     if (!ok) form.querySelector('button').disabled = false;
   } },
-    el('label', { class: 'field' }, el('span', { text: 'Your name' }), nameInput),
-    el('button', { class: 'btn primary big', type: 'submit', text: `Join game as ${G.colorName(free)}` }));
+    el('label', { class: 'field' }, el('span', { text: t('lobby.yourName') }), nameInput),
+    el('button', { class: 'btn primary big', type: 'submit', text: t('seat.join', { color: free }) }));
   panel.replaceChildren(
-    el('h2', { text: 'Join this game' }),
-    el('p', { text: `${host ? host.name : 'The host'} is waiting. You'll play ${G.colorName(free)} · ${G.describeTimeControl(s.room.tc)}. The clock starts as soon as you join.` }),
+    el('h2', { text: t('seat.title') }),
+    el('p', { text: t('seat.text', { host: host ? host.name : t('seat.theHost'), color: free, tc: timeControl(s.room.tc) }) }),
     form,
-    el('p', { class: 'hint', text: 'Or stay on this page to watch without joining.' }),
+    el('p', { class: 'hint', text: t('seat.watch') }),
   );
 }
 
@@ -762,6 +790,7 @@ function inviteText(s) {
     'Choose one way to play:',
     '',
     `A) Browser: open ${url}`,
+    '   (If the page shows another language, add &lang=en to the address.)',
     '   Enter your name and press "Join game". To move, type it in the "Type a move" box (SAN like Nf3, or UCI like g1f3) and press Enter.',
     '   The "Game state (text)" section shows the FEN, move list and an ASCII board.',
     '   Important: keeping the page open does NOT keep you running. When you end your turn you stop seeing the game, and your clock keeps going.',
@@ -783,7 +812,16 @@ function inviteText(s) {
     'When the game ends, don\'t leave yet: stay in the room for at least 30 seconds (CLI: node agent-chess.mjs wait ROOM --any --timeout 30). I may ask for a short analysis (comments on key moves that show up next to them on my screen) or a rematch. The details are in the rules link below.',
     `Full rules and message formats: ${siteBase()}AGENTS.md`,
     'Feel free to chat in the room too: {"type":"chat","id":"...","text":"good luck"}',
+    ...languageLine(),
   ].join('\n');
+}
+
+// For prompts written to agents (always English): ask them to use the viewer's language.
+function languageLine() {
+  const l = lang();
+  if (l === 'en') return [];
+  const name = langNameEnglish(l);
+  return ['', `Language: I read ${name} (${l}). Please write your chat messages and analysis comments in ${name}.`];
 }
 
 function renderInvite() {
@@ -793,15 +831,16 @@ function renderInvite() {
   panel.hidden = !show;
   if (!show || panel.dataset.ready === R.code) return;
   panel.dataset.ready = R.code;
-  const link = el('input', { value: roomUrl(R.code), readonly: true, 'aria-label': 'Room link', onfocus: (e) => e.target.select() });
+  const link = el('input', { value: roomUrl(R.code), readonly: true, 'aria-label': t('inv.linkLabel'), onfocus: (e) => e.target.select() });
   const pre = el('pre', { text: inviteText(s) });
   panel.replaceChildren(
-    el('h2', { text: `Room ${R.code} is open` }),
-    el('p', { text: 'Send this link to your opponent. For an AI agent, copy the full invite: it explains how to join and move, in a browser or over HTTP.' }),
-    el('div', { class: 'share-link' }, link, el('button', { class: 'btn', type: 'button', text: 'Copy link', onclick: () => copy(roomUrl(R.code), 'Room link copied') })),
+    el('h2', { text: t('inv.title', { code: R.code }) }),
+    el('p', { text: t('inv.text') }),
+    el('div', { class: 'share-link' }, link, el('button', { class: 'btn', type: 'button', text: t('common.copyLink'), onclick: () => copy(roomUrl(R.code), t('room.linkCopied')) })),
     el('div', { class: 'actions-row' },
-      el('button', { class: 'btn primary', type: 'button', text: 'Copy invite for an agent', onclick: () => copy(inviteText(R.s), 'Agent invite copied') })),
-    el('details', {}, el('summary', { class: 'link-btn', text: 'Preview the agent invite' }), pre),
+      el('button', { class: 'btn primary', type: 'button', text: t('inv.copyInvite'), onclick: () => copy(inviteText(R.s), t('inv.copied')) })),
+    el('details', {}, el('summary', { class: 'link-btn', text: t('inv.preview') }),
+      lang() !== 'en' ? el('p', { class: 'hint', text: t('inv.englishNote') }) : null, pre),
   );
 }
 
@@ -809,7 +848,7 @@ function renderSheet() {
   const s = R.s;
   const sheet = $('sheet');
   const items = [];
-  if (!s.moves.length) items.push(el('li', {}, el('span', { class: 'empty', text: s.started ? 'No moves yet.' : 'The game starts when both seats are filled.' })));
+  if (!s.moves.length) items.push(el('li', {}, el('span', { class: 'empty', text: s.started ? t('moves.none') : t('moves.notStarted') })));
   const finished = !!s.result;
   const current = R.review ? R.review.ply - 1 : s.moves.length - 1;
   const a = s.analysis[s.game];
@@ -817,10 +856,10 @@ function renderSheet() {
     if (!m) return el('span', { class: 'm' });
     const notes = (a && a.notes[i + 1]) || [];
     const tag = notes.length ? notes[0].tag : null;
-    const kids = [m.san, tag ? el('span', { class: `sym tag-${tag}`, title: G.TAGS[tag].label, text: G.TAGS[tag].symbol }) : null];
+    const kids = [m.san, tag ? el('span', { class: `sym tag-${tag}`, title: tagLabel(tag), text: G.TAGS[tag].symbol }) : null];
     const cls = 'm' + (i === current ? ' latest' : '') + (tag ? ' noted' : '');
     if (!finished) return el('span', { class: cls }, ...kids);
-    return el('button', { class: cls, type: 'button', 'aria-label': `Review ${G.moveLabel(i + 1, m.san)}${tag ? `, ${G.TAGS[tag].label}` : ''}`,
+    return el('button', { class: cls, type: 'button', 'aria-label': `${t('moves.review', { move: G.moveLabel(i + 1, m.san) })}${tag ? `, ${tagLabel(tag)}` : ''}`,
       onclick: () => startReview(i + 1) }, ...kids);
   };
   for (let i = 0; i < s.moves.length; i += 2) {
@@ -848,7 +887,7 @@ function analysisWaitStatus(g) {
   const a = s.analysis[g];
   const mine = seat();
   if (!a || !mine || !a.requests.some((r) => r.color === mine)) return null;
-  const analyst = G.playerName(s, G.other(mine));
+  const analyst = pName(s, G.other(mine));
   const count = G.noteCount(s, g);
   const st = a.status && a.status.authorId !== R.me.id ? a.status : null;
   if (!st) return { state: 'waiting', who: analyst, count };
@@ -857,22 +896,23 @@ function analysisWaitStatus(g) {
 
 function analysisStatusNode(st, compact = false) {
   if (!st) return null;
-  const n = `${st.count} comment${st.count === 1 ? '' : 's'}`;
   if (st.state === 'done') {
     return el('p', { class: 'an-status done', role: 'status' }, el('span', { class: 'an-check', 'aria-hidden': 'true', text: '✓' }),
-      `${st.who} finished the analysis${compact ? '' : ` (${n})`}.`);
+      compact ? t('an.done', { who: st.who }) : t('an.doneCount', { who: st.who, n: st.count }));
   }
   if (st.state === 'working') {
-    return el('p', { class: 'an-status working', role: 'status' }, el('span', { class: 'throbber', 'aria-hidden': 'true' }),
-      `${st.who} is analyzing the game… ${st.count ? `${n} so far` : ''}${!compact && st.quietMin >= 5 ? ` (no update for ${st.quietMin} min)` : ''}`);
+    const parts = [t('an.working', { who: st.who })];
+    if (st.count) parts.push(t('an.soFar', { n: st.count }));
+    if (!compact && st.quietMin >= 5) parts.push(t('an.quiet', { n: st.quietMin }));
+    return el('p', { class: 'an-status working', role: 'status' }, el('span', { class: 'throbber', 'aria-hidden': 'true' }), parts.join(' '));
   }
   return el('p', { class: 'an-status waiting', role: 'status' }, el('span', { class: 'throbber idle', 'aria-hidden': 'true' }),
-    `Analysis requested. Waiting for ${st.who} to start.`);
+    t('an.waiting', { who: st.who }));
 }
 
 async function markAnalysis(state) {
   const ok = await publish({ type: 'analysis-status', id: R.me.id, game: R.review ? R.review.game : R.s.game, state });
-  if (ok && state === 'done') toast('Marked the analysis as done');
+  if (ok && state === 'done') toast(t('an.markedDone'));
 }
 function myAnalysisRequest() {
   const a = R.s.analysis[R.s.game];
@@ -883,17 +923,17 @@ function analysisButton(cls = 'btn on-dark') {
   const s = R.s;
   if (!seat() || !s.result) return null;
   if (myAnalysisRequest()) {
-    return el('button', { class: cls, type: 'button', text: 'Copy analysis request', title: 'Copy the request again to paste to your opponent',
-      onclick: () => copy(analysisPrompt(), 'Analysis request copied') });
+    return el('button', { class: cls, type: 'button', text: t('an.copyRequest'), title: t('an.copyRequestTitle'),
+      onclick: () => copy(analysisPrompt(), t('an.copied')) });
   }
-  return el('button', { class: cls + ' primary-ish', type: 'button', text: 'Request analysis', onclick: requestAnalysis });
+  return el('button', { class: cls + ' primary-ish', type: 'button', text: t('an.request'), onclick: requestAnalysis });
 }
 
 async function requestAnalysis() {
   const s = R.s;
   const ok = await publish({ type: 'analysis-request', id: R.me.id, game: s.game });
   if (!ok) return;
-  await copy(analysisPrompt(), 'Analysis requested. The request is also on your clipboard: paste it to your opponent if they stopped listening.');
+  await copy(analysisPrompt(), t('an.requested'));
   startReview();
 }
 
@@ -920,6 +960,7 @@ function analysisPrompt() {
     `   curl -s -d '{"type":"analysis-status","id":"YOUR-ID","game":${g},"state":"done"}' ${topicUrl}   # when you're finished`,
     '',
     `Details: ${siteBase()}AGENTS.md (section "Post-game analysis").`,
+    ...languageLine(),
   ].join('\n');
 }
 
@@ -986,24 +1027,24 @@ function renderReview() {
 
   const body = [];
   if (ply === 0) {
-    body.push(el('p', { class: 'rv-where', text: 'Starting position' })); // replaced below by the header row
+    body.push(el('p', { class: 'rv-where', text: t('rv.start') })); // replaced below by the header row
   } else {
-    body.push(el('p', { class: 'rv-where', text: G.moveLabel(ply, move.san) + ` · ${G.colorName(move.color)}` }));
+    body.push(el('p', { class: 'rv-where', text: G.moveLabel(ply, move.san) + ` · ${cName(move.color)}` }));
   }
   if (notes.length) {
     for (const n of notes) {
       body.push(el('div', { class: 'rv-note' },
-        el('span', { class: `rv-tag tag-${n.tag}` }, el('b', { text: G.TAGS[n.tag].symbol }), ` ${G.TAGS[n.tag].label}`),
+        el('span', { class: `rv-tag tag-${n.tag}` }, el('b', { text: G.TAGS[n.tag].symbol }), ` ${tagLabel(n.tag)}`),
         n.text ? el('p', { text: n.text }) : null,
-        n.better ? el('p', { class: 'rv-better' }, 'Better: ', el('strong', { text: n.better.san }), ' (arrow on the board)') : null,
-        el('p', { class: 'rv-by', text: `— ${n.author}` })));
+        n.better ? el('p', { class: 'rv-better' }, ...tNodes('rv.better', { move: el('strong', { text: n.better.san }) })) : null,
+        el('p', { class: 'rv-by', text: t('rv.by', { name: n.author }) })));
     }
   } else if (ply > 0) {
-    body.push(el('p', { class: 'rv-empty', text: 'No comment on this move.' }));
+    body.push(el('p', { class: 'rv-empty', text: t('rv.noComment') }));
   }
   if (a.summaries.length && (ply === 0 || ply === total)) {
     for (const x of a.summaries) {
-      body.push(el('div', { class: 'rv-summary' }, el('h3', { text: `Summary from ${x.author}` }), el('p', { text: x.text })));
+      body.push(el('div', { class: 'rv-summary' }, el('h3', { text: t('rv.summaryFrom', { name: x.author }) }), el('p', { text: x.text })));
     }
   }
   const mine = seat();
@@ -1013,14 +1054,14 @@ function renderReview() {
   const askedOfMe = invited && a.requests.find((r) => r.color !== mine);
   const iAsked = mine && a.requests.some((r) => r.color === mine);
   if (askedOfMe) {
-    body.push(el('p', { class: 'rv-ask', text: `${askedOfMe.by} asked you for an analysis. Step to a key moment and add a comment below, and finish with a summary on the last move.` }));
+    body.push(el('p', { class: 'rv-ask', text: t('rv.asked', { name: askedOfMe.by }) }));
   }
   const waitSt = analysisWaitStatus(R.review.game);
   if (waitSt) body.push(analysisStatusNode(waitSt));
   else if (!plies.length && !a.summaries.length && !askedOfMe) {
     body.push(el('p', { class: 'rv-empty', text: iAsked
-      ? `Analysis requested. Comments appear here as ${mine ? G.playerName(s, G.other(mine)) : 'your opponent'} adds them.`
-      : 'No analysis yet. Use "Request analysis" to ask your opponent to annotate this game.' }));
+      ? t('rv.requested', { name: mine ? pName(s, G.other(mine)) : t('rv.yourOpponent') })
+      : t('rv.none') }));
   }
   if (invited) body.push(annotateForm(ply, total, notes, a));
 
@@ -1028,27 +1069,27 @@ function renderReview() {
     el('button', { class: 'btn nav', type: 'button', 'aria-label': label, title: label, text, disabled, onclick: () => stepReview(to) });
   // Header row: the move on the left, compact ◀ ▶ » controls on the right (shown on mobile;
   // desktop keeps the full button row below).
-  const whereText = ply === 0 ? 'Starting position' : G.moveLabel(ply, move.san) + ` · ${G.colorName(move.color)}`;
+  const whereText = ply === 0 ? t('rv.start') : G.moveLabel(ply, move.san) + ` · ${cName(move.color)}`;
   const hasNext = plies.some((p) => p > ply);
   body[0] = el('div', { class: 'rv-top' },
     el('p', { class: 'rv-where', text: whereText }),
     el('div', { class: 'rv-mininav' },
-      el('button', { class: 'mini', type: 'button', 'aria-label': 'Previous move', title: 'Previous move', text: '◀', disabled: ply === 0, onclick: () => stepReview(ply - 1) }),
-      el('button', { class: 'mini', type: 'button', 'aria-label': 'Next move', title: 'Next move', text: '▶', disabled: ply >= total, onclick: () => stepReview(ply + 1) }),
-      el('button', { class: 'mini', type: 'button', 'aria-label': 'Next comment', title: 'Next comment', text: '»', disabled: !hasNext, onclick: () => nextNoted(1) })));
+      el('button', { class: 'mini', type: 'button', 'aria-label': t('rv.prev'), title: t('rv.prev'), text: '◀', disabled: ply === 0, onclick: () => stepReview(ply - 1) }),
+      el('button', { class: 'mini', type: 'button', 'aria-label': t('rv.next'), title: t('rv.next'), text: '▶', disabled: ply >= total, onclick: () => stepReview(ply + 1) }),
+      el('button', { class: 'mini', type: 'button', 'aria-label': t('rv.nextComment'), title: t('rv.nextComment'), text: '»', disabled: !hasNext, onclick: () => nextNoted(1) })));
   panel.replaceChildren(
     el('div', { class: 'panel-head rv-head' },
-      el('h2', { text: `Game review${plies.length || a.summaries.length ? ` · ${G.noteCount(s, R.review.game)} comment${G.noteCount(s, R.review.game) === 1 ? '' : 's'}` : ''}` }),
-      el('button', { class: 'link-btn', type: 'button', text: 'Close review', onclick: () => { R.review = null; render(); } })),
+      el('h2', { text: plies.length || a.summaries.length ? t('rv.titleCount', { n: G.noteCount(s, R.review.game) }) : t('rv.title') }),
+      el('button', { class: 'link-btn', type: 'button', text: t('rv.close'), onclick: () => { R.review = null; render(); } })),
     ...body,
     el('div', { class: 'rv-nav' },
-      el('span', { class: 'nav-end' }, nav('First position', '⏮', 0, ply === 0)),
-      nav('Previous move', '◀', ply - 1, ply === 0),
-      nav('Next move', '▶', ply + 1, ply >= total),
-      el('span', { class: 'nav-end' }, nav('Last move', '⏭', total, ply >= total)),
-      el('button', { class: 'btn', type: 'button', text: 'Next comment', disabled: !plies.some((p) => p > ply), onclick: () => nextNoted(1) })),
-    el('p', { class: 'hint rv-tip', text: 'Tip: ← and → step through the moves.' }),
-    el('button', { class: 'btn rv-close-bottom', type: 'button', text: 'Close review', onclick: () => { R.review = null; render(); } }),
+      el('span', { class: 'nav-end' }, nav(t('rv.first'), '⏮', 0, ply === 0)),
+      nav(t('rv.prev'), '◀', ply - 1, ply === 0),
+      nav(t('rv.next'), '▶', ply + 1, ply >= total),
+      el('span', { class: 'nav-end' }, nav(t('rv.last'), '⏭', total, ply >= total)),
+      el('button', { class: 'btn', type: 'button', text: t('rv.nextComment'), disabled: !plies.some((p) => p > ply), onclick: () => nextNoted(1) })),
+    el('p', { class: 'hint rv-tip', text: t('rv.tip') }),
+    el('button', { class: 'btn rv-close-bottom', type: 'button', text: t('rv.close'), onclick: () => { R.review = null; render(); } }),
   );
 }
 
@@ -1059,57 +1100,57 @@ function annotateForm(ply, total, notes, a) {
   const form = el('form', { class: 'rv-form', autocomplete: 'off' });
   if (ply > 0) {
     const mineHere = notes.find((n) => n.authorId === myId);
-    const select = el('select', { id: 'rv-tag', 'aria-label': 'Tag' },
-      ...Object.entries(G.TAGS).map(([k, t]) => el('option', { value: k, text: `${t.symbol} ${t.label}`, selected: (mineHere ? mineHere.tag : 'note') === k })));
-    const text = el('textarea', { id: 'rv-text', rows: '3', maxlength: '1000', 'aria-label': 'Comment', placeholder: 'What happened on this move?' });
+    const select = el('select', { id: 'rv-tag', 'aria-label': t('rv.tag') },
+      ...Object.entries(G.TAGS).map(([k, tg]) => el('option', { value: k, text: `${tg.symbol} ${tagLabel(k)}`, selected: (mineHere ? mineHere.tag : 'note') === k })));
+    const text = el('textarea', { id: 'rv-text', rows: '3', maxlength: '1000', 'aria-label': t('rv.comment'), placeholder: t('rv.commentPh') });
     text.value = mineHere ? mineHere.text : '';
-    const better = el('input', { id: 'rv-better', 'aria-label': 'Better move', placeholder: 'Better move (optional), e.g. Nf3', value: mineHere && mineHere.better ? mineHere.better.san : '' });
+    const better = el('input', { id: 'rv-better', 'aria-label': t('rv.betterLabel'), placeholder: t('rv.betterPh'), value: mineHere && mineHere.better ? mineHere.better.san : '' });
     const err = el('p', { class: 'form-error', role: 'alert' });
     form.append(
-      el('h3', { text: `${mineHere ? 'Edit your' : 'Your'} comment on ${G.moveLabel(ply, reviewRecord().moves[ply - 1].san)}` }),
+      el('h3', { text: t(mineHere ? 'rv.editYour' : 'rv.your', { move: G.moveLabel(ply, reviewRecord().moves[ply - 1].san) }) }),
       el('div', { class: 'rv-row' }, select, better), text, err,
-      el('button', { class: 'btn primary', type: 'submit', text: mineHere ? 'Update comment' : 'Post comment' }));
+      el('button', { class: 'btn primary', type: 'submit', text: mineHere ? t('rv.update') : t('rv.post') }));
     form.onsubmit = async (e) => {
       e.preventDefault();
       err.textContent = '';
       const b = better.value.trim();
       if (b) {
         const c = new Chess(G.fenBefore(reviewRecord(), ply));
-        if (!G.previewMove({ chess: c }, b)) { err.textContent = `"${b}" isn't legal in the position before this move.`; return; }
+        if (!G.previewMove({ chess: c }, b)) { err.textContent = t('rv.illegalBetter', { move: b }); return; }
       }
-      if (!text.value.trim() && !b && select.value === 'note') { err.textContent = 'Write a comment, pick a tag or suggest a better move.'; return; }
+      if (!text.value.trim() && !b && select.value === 'note') { err.textContent = t('rv.empty'); return; }
       const ok = await publish({ type: 'annotation', id: myId, game: g, at: G.plyLabel(ply), tag: select.value, text: text.value.trim(), better: b || undefined });
-      if (ok) { toast('Comment posted'); document.activeElement.blur(); renderReview(); }
+      if (ok) { toast(t('rv.posted')); document.activeElement.blur(); renderReview(); }
     };
   }
   if (ply === 0 || ply === total) {
     const mineSum = a.summaries.find((x) => x.authorId === myId);
-    const sum = el('textarea', { id: 'rv-summary', rows: '3', maxlength: '1000', 'aria-label': 'Summary', placeholder: 'Two or three sentences on the whole game' });
+    const sum = el('textarea', { id: 'rv-summary', rows: '3', maxlength: '1000', 'aria-label': t('rv.summaryLabel'), placeholder: t('rv.summaryPh') });
     sum.value = mineSum ? mineSum.text : '';
-    const sumBtn = el('button', { class: 'btn', type: 'button', text: mineSum ? 'Update summary' : 'Post summary', onclick: async () => {
+    const sumBtn = el('button', { class: 'btn', type: 'button', text: mineSum ? t('rv.updateSummary') : t('rv.postSummary'), onclick: async () => {
       if (!sum.value.trim()) return;
-      if (await publish({ type: 'annotation', id: myId, game: g, at: 'summary', text: sum.value.trim() })) { toast('Summary posted'); document.activeElement.blur(); renderReview(); }
+      if (await publish({ type: 'annotation', id: myId, game: g, at: 'summary', text: sum.value.trim() })) { toast(t('rv.summaryPosted')); document.activeElement.blur(); renderReview(); }
     } });
-    form.append(el('h3', { text: 'Game summary' }), sum, sumBtn);
+    form.append(el('h3', { text: t('rv.gameSummary') }), sum, sumBtn);
   }
   // Tell the requester when the analysis is finished (stops their "analyzing…" indicator).
   const myStatus = a.status && a.status.authorId === myId ? a.status.state : null;
   if (a.requests.some((r) => r.color !== seat())) {
     form.append(myStatus === 'done'
-      ? el('p', { class: 'an-status done' }, el('span', { class: 'an-check', 'aria-hidden': 'true', text: '✓' }), 'You marked the analysis as done. You can still edit comments.')
-      : el('button', { class: 'btn primary an-done', type: 'button', text: 'Mark analysis done', onclick: () => markAnalysis('done') }));
+      ? el('p', { class: 'an-status done' }, el('span', { class: 'an-check', 'aria-hidden': 'true', text: '✓' }), t('rv.youMarkedDone'))
+      : el('button', { class: 'btn primary an-done', type: 'button', text: t('rv.markDone'), onclick: () => markAnalysis('done') }));
   }
   return form;
 }
 
 function renderFeed() {
   const feed = $('feed');
-  const fmt = (t) => new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const fmt = (ms) => new Date(ms).toLocaleTimeString(lang(), { hour: '2-digit', minute: '2-digit' });
   const items = R.s.feed.slice(-200).map((f) =>
     f.kind === 'chat'
       ? el('li', {}, el('b', { text: `${f.from}: ` }), f.text)
-      : el('li', { class: 'system', title: fmt(f.time), text: f.text }));
-  if (!items.length) items.push(el('li', { class: 'system', text: 'Nothing here yet.' }));
+      : el('li', { class: 'system', title: fmt(f.time), text: logText(f) }));
+  if (!items.length) items.push(el('li', { class: 'system', text: t('log.empty') }));
   feed.replaceChildren(...items);
   feed.scrollTop = feed.scrollHeight;
 }
@@ -1127,7 +1168,7 @@ function renderOpeningChip() {
   }
   chip.hidden = false;
   chip.replaceChildren(el('span', { class: 'eco', text: R.openingInfo.eco }), el('span', { class: 'oname', text: R.openingInfo.name }), el('span', { class: 'more', 'aria-hidden': 'true', text: '›' }));
-  chip.title = `${R.openingInfo.eco} ${R.openingInfo.name}: show the opening line and a short primer`;
+  chip.title = t('op.chipTitle', { eco: R.openingInfo.eco, name: R.openingInfo.name });
 }
 
 function openOpening() {
@@ -1157,7 +1198,7 @@ function miniBoard(fen, last, flip) {
       squares.push(node);
     }
   }
-  return el('div', { class: 'mini-board', role: 'img', 'aria-label': `Board after the shown move. FEN ${fen}` }, ...squares);
+  return el('div', { class: 'mini-board', role: 'img', 'aria-label': t('op.miniBoard', { fen }) }, ...squares);
 }
 
 function renderOpening() {
@@ -1187,27 +1228,28 @@ function renderOpening() {
   const played = R.review ? reviewRecord().moves.length : R.s.moves.length;
   const followed = info.ply;
   const where = followed >= played
-    ? 'Your game is still in this line.'
-    : `Your game reached this position after ${G.moveLabel(followed, (R.review ? reviewRecord() : R.s).moves[followed - 1].san)} and then left the named lines.`;
+    ? t('op.inLine')
+    : t('op.left', { move: G.moveLabel(followed, (R.review ? reviewRecord() : R.s).moves[followed - 1].san) });
 
   panel.replaceChildren(
     el('div', { class: 'op-top' },
       el('div', { class: 'op-title' }, el('span', { class: 'eco', text: info.eco }), el('h2', { text: info.name })),
       el('div', { class: 'rv-mininav op-nav' },
-        mini('Start position', '⏮', 0, ply === 0),
-        mini('Previous move', '◀', ply - 1, ply === 0),
-        mini('Next move', '▶', ply + 1, ply >= line.length),
-        mini('End of line', '⏭', line.length, ply >= line.length))),
+        mini(t('op.start'), '⏮', 0, ply === 0),
+        mini(t('rv.prev'), '◀', ply - 1, ply === 0),
+        mini(t('rv.next'), '▶', ply + 1, ply >= line.length),
+        mini(t('op.end'), '⏭', line.length, ply >= line.length))),
     miniBoard(c.fen(), last, flipped()),
-    el('div', { class: 'op-line', 'aria-label': 'Opening moves' }, ...moveItems),
+    el('div', { class: 'op-line', 'aria-label': t('op.moves') }, ...moveItems),
     el('p', { class: 'op-where', text: where }),
     fam ? el('div', { class: 'op-primer' },
       el('p', { text: fam.about }),
-      el('h3', { text: 'Ideas for White' }), el('p', { text: fam.white }),
-      el('h3', { text: 'Ideas for Black' }), el('p', { text: fam.black })) : el('p', { class: 'op-primer', text: ecoVolume(info.eco) }),
+      el('h3', { text: t('op.white') }), el('p', { text: fam.white }),
+      el('h3', { text: t('op.black') }), el('p', { text: fam.black })) : el('p', { class: 'op-primer', text: /^[A-E]/.test(info.eco) ? t(`eco.${info.eco[0]}`) : ecoVolume(info.eco) }),
     ...(primer ? primer.notes.map((n) => el('div', { class: 'op-note' }, el('h3', { text: n.match.split(':').pop().trim() }), el('p', { text: n.text }))) : []),
-    el('p', { class: 'op-credit' }, 'Names and lines: ', el('a', { href: 'https://github.com/lichess-org/chess-openings', target: '_blank', rel: 'noopener', text: 'Lichess openings (public domain)' }), '.'),
-    el('button', { class: 'btn op-close', type: 'button', text: 'Close', onclick: close }),
+    el('p', { class: 'op-credit' }, ...tNodes('op.credit', { link: el('a', { href: 'https://github.com/lichess-org/chess-openings', target: '_blank', rel: 'noopener', text: t('op.creditLink') }) }),
+      fam && lang() !== 'en' ? ` ${t('op.englishOnly')}` : null),
+    el('button', { class: 'btn op-close', type: 'button', text: t('common.close'), onclick: close }),
   );
 }
 
@@ -1226,7 +1268,8 @@ function renderTextState() {
 function renderAgentHelp() {
   const topicUrl = `${RELAY}/${topicFor(R.code)}`;
   $('agent-help-body').replaceChildren(
-    el('p', { text: 'You can play right here: enter a name in "Join this game", press the join button, then type moves into the "Type a move" box and press Enter. Moves can be SAN (Nf3, exd5, O-O, e8=Q) or UCI (g1f3, e7e8q).' }),
+    lang() !== 'en' ? el('p', { class: 'hint', text: t('agents.englishNote') }) : null,
+    el('p', { text: 'You can play right here: enter a name in "Join this game", press the join button, then type moves into the "Type a move" box and press Enter. Moves can be SAN (Nf3, exd5, O-O, e8=Q) or UCI (g1f3, e7e8q). If the page is not in English, add &lang=en to the address to switch it.' }),
     el('p', { text: 'Without a browser, use the command-line client (Node 18+):' }),
     el('pre', { text: `curl -sO ${siteBase()}agent-chess.mjs\nnode agent-chess.mjs join ${R.code} --name "YOUR NAME"\nnode agent-chess.mjs wait ${R.code}\nnode agent-chess.mjs move ${R.code} <move>` }),
     el('p', { text: 'Or speak to the relay directly. Every action is a POST of one JSON message; reading the room returns every message so far, one per line:' }),
@@ -1255,9 +1298,9 @@ function wireRoomControls() {
     const id = (R.me && R.me.id) || (R.me = { id: 'p-' + randomString(12, 'abcdefghijklmnopqrstuvwxyz0123456789'), name: store.get('agentchess:name') || 'Spectator' }).id;
     if (await publish({ type: 'chat', id, name: R.me.name || store.get('agentchess:name') || 'Spectator', text })) input.value = '';
   });
-  $('copy-pgn').addEventListener('click', () => copy(G.toPgn(R.s), 'PGN copied'));
+  $('copy-pgn').addEventListener('click', () => copy(G.toPgn(R.s), t('moves.pgnCopied')));
   $('opening-chip').addEventListener('click', () => (R.opening ? (R.opening = null, renderOpening()) : openOpening()));
-  $('copy-fen').addEventListener('click', () => copy(R.s.chess.fen(), 'FEN copied'));
+  $('copy-fen').addEventListener('click', () => copy(R.s.chess.fen(), t('moves.fenCopied')));
   $('missing-retry').addEventListener('click', async () => {
     await R.relay.catchUp();
     render();
@@ -1283,10 +1326,42 @@ function wireRoomControls() {
   });
 }
 
+function renderConn() {
+  const c = $('conn');
+  const st = R.connState;
+  if (!c || !st) return;
+  c.dataset.state = st;
+  c.textContent = t(`conn.${st}`);
+  c.title = st === 'polling' ? t('conn.pollingTitle') : '';
+}
+
+function renderLobbyText() {
+  $('agents-hint').replaceChildren(...tNodes('lobby.agentsHint', { link: el('a', { href: 'AGENTS.md', text: 'AGENTS.md' }) }));
+}
+
+// Re-draw everything in a new language (static text is handled by data-i18n).
+function onLanguage() {
+  renderLobbyText();
+  if (!R.code) { document.title = appTitle(); return; }
+  $('room-code-btn').title = t('room.copyLink');
+  renderAgentHelp();
+  $('missing-text').replaceChildren(...tNodes('room.missingText', { code: el('strong', { class: 'code-inline', text: R.code }) }));
+  renderConn();
+  if (R.s && R.s.room) {
+    delete $('seat-panel').dataset.free; // rebuild panels that normally keep their contents
+    delete $('invite-panel').dataset.ready;
+    render();
+  }
+}
+
 // ---------- boot ----------
+await setLang(chooseLang());
 wireStyleMenu(() => { if (R.s && R.s.room) renderBoard(); });
-document.title = APP_TITLE;
+wireLangPicker();
+onLangChange(onLanguage);
+document.title = appTitle();
 $('app-version').textContent = `v${VERSION}`;
+renderLobbyText();
 const roomParam = normalizeCode(params.get('room'));
-if (roomParam) enterRoom(roomParam);
+if (roomParam) { enterRoom(roomParam); onLanguage(); }
 else showLobby();

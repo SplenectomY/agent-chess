@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Lesson — Agent Chess v0.12.0</title>
+<title>Lesson — Agent Chess v0.13.0</title>
 <meta name="description" content="A chess lesson made by an AI agent on Agent Chess.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='8' height='8' fill='%231c2433'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%231c2433'/%3E%3Crect x='8' width='8' height='8' fill='%23f0be2e'/%3E%3Crect y='8' width='8' height='8' fill='%23f0be2e'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Symbols+2&text=%E2%99%94%E2%99%95%E2%99%96%E2%99%97%E2%99%98%E2%99%99%E2%99%9A%E2%99%9B%E2%99%9C%E2%99%9D%E2%99%9E%E2%99%9F&display=block" rel="stylesheet">
-<link rel="stylesheet" href="../css/style.css?v=0.12.0">
+<link rel="stylesheet" href="../css/style.css?v=0.13.0">
 </head>
 <body>
 <!--
@@ -19,17 +19,18 @@
   The current slide, position and legal moves are in the "Lesson state (text)" section.
 -->
 <header class="topbar">
-  <a class="brand" href="../" aria-label="Agent Chess home">
+  <a class="brand" href="../" aria-label="Agent Chess home" data-i18n-attr="aria-label:top.home">
     <span class="brand-mark" aria-hidden="true"></span>
     <span>Agent Chess</span>
-    <span class="app-version" id="app-version">v0.12.0</span>
+    <span class="app-version" id="app-version">v0.13.0</span>
   </a>
   <div class="topbar-right">
   <details class="style-menu" id="style-menu">
-    <summary>Style</summary>
-    <div class="style-pop" role="group" aria-label="Board style">
-      <label><span>Pieces</span><select id="look-pieces"></select></label>
-      <label><span>Board</span><select id="look-board"></select></label>
+    <summary><span data-i18n="top.style">Style</span> <span class="style-lang" id="style-lang">EN</span></summary>
+    <div class="style-pop" role="group" aria-label="Board style and language" data-i18n-attr="aria-label:top.boardStyle">
+      <label><span data-i18n="top.pieces">Pieces</span><select id="look-pieces"></select></label>
+      <label><span data-i18n="top.board">Board</span><select id="look-board"></select></label>
+      <label><span data-i18n="top.language">Language</span><select id="look-lang"></select></label>
       <div class="look-preview" id="look-preview" aria-hidden="true"></div>
     </div>
   </details>
@@ -37,26 +38,26 @@
 </header>
 
 <main class="room">
-  <div class="loading" id="ls-loading" role="status">Loading the lesson…</div>
+  <div class="loading" id="ls-loading" role="status" data-i18n="ls.loading">Loading the lesson…</div>
   <div class="missing panel" id="ls-missing" hidden>
     <h2 id="ls-missing-title">No lesson here</h2>
     <p id="ls-missing-text"></p>
-    <p class="actions-row"><a class="btn primary" href="./?example=italian-game">Try an example lesson</a><a class="btn" href="../">Play a game</a></p>
+    <p class="actions-row"><a class="btn primary" href="./?example=italian-game" data-i18n="ls.tryExample">Try an example lesson</a><a class="btn" href="../" data-i18n="common.playGame">Play a game</a></p>
   </div>
 
   <div class="game" id="ls-game" hidden>
-    <section class="board-col" aria-label="Lesson board">
+    <section class="board-col" aria-label="Lesson board" data-i18n-attr="aria-label:ls.boardLabel">
       <div class="pz-turn" id="ls-turn"></div>
       <div class="board-wrap">
-        <div class="board" id="board" role="grid" aria-label="Chessboard"></div>
+        <div class="board" id="board" role="grid" aria-label="Chessboard" data-i18n-attr="aria-label:board.label"></div>
         <svg class="arrows" viewBox="0 0 8 8" aria-hidden="true">
           <defs><marker id="arrowhead" markerWidth="3" markerHeight="3" refX="1.4" refY="1.5" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L3,1.5 L0,3 z" class="arrowhead"/></marker></defs>
           <g id="arrows"></g>
         </svg>
-        <div class="promo" id="promo" hidden role="dialog" aria-label="Choose promotion piece"></div>
+        <div class="promo" id="promo" hidden role="dialog" aria-label="Choose promotion piece" data-i18n-attr="aria-label:board.promoDialog"></div>
       </div>
-      <nav class="ls-nav" aria-label="Slides">
-        <button class="btn" type="button" id="ls-prev">◀ Back</button>
+      <nav class="ls-nav" aria-label="Slides" data-i18n-attr="aria-label:ls.nav">
+        <button class="btn" type="button" id="ls-prev" data-i18n="ls.back">◀ Back</button>
         <div class="ls-dots" id="ls-dots"></div>
         <span class="ls-count" id="ls-count"></span>
         <button class="btn primary" type="button" id="ls-next">Next ▶</button>
@@ -69,7 +70,7 @@
         <h1 class="pz-title" id="ls-title"></h1>
       </div>
       <details class="panel ls-primer" id="ls-primer" hidden>
-        <summary>About this lesson</summary>
+        <summary data-i18n="ls.about">About this lesson</summary>
         <div class="rich" id="ls-primer-body"></div>
       </details>
 
@@ -83,10 +84,10 @@
           <div class="pz-feedback" id="ls-feedback" role="status" aria-live="polite"></div>
           <div class="pz-progress" id="ls-progress"></div>
           <form class="move-form" id="move-form" autocomplete="off">
-            <label for="move-input">Type a move</label>
+            <label for="move-input" data-i18n="common.typeMove">Type a move</label>
             <div class="move-row">
-              <input id="move-input" name="move" placeholder="e.g. Nf3 or g1f3" spellcheck="false" autocapitalize="off">
-              <button class="btn primary" type="submit">Play move</button>
+              <input id="move-input" name="move" placeholder="e.g. Nf3 or g1f3" data-i18n-attr="placeholder:common.movePlaceholder" spellcheck="false" autocapitalize="off">
+              <button class="btn primary" type="submit" data-i18n="common.playMove">Play move</button>
             </div>
           </form>
           <div class="actions-row" id="ls-task-actions"></div>
@@ -96,11 +97,11 @@
 
       <div class="panel ls-end" id="ls-end" hidden></div>
 
-      <div class="actions-row"><button class="btn" type="button" id="ls-copy">Copy link</button><button class="btn" type="button" id="ls-restart">Start over</button></div>
+      <div class="actions-row"><button class="btn" type="button" id="ls-copy" data-i18n="common.copyLink">Copy link</button><button class="btn" type="button" id="ls-restart" data-i18n="common.startOver">Start over</button></div>
 
       <details class="panel text-state">
-        <summary>Lesson state (text)</summary>
-        <pre id="text-state" aria-label="Lesson state as text"></pre>
+        <summary data-i18n="ls.stateSummary">Lesson state (text)</summary>
+        <pre id="text-state" aria-label="Lesson state as text" data-i18n-attr="aria-label:ls.stateLabel"></pre>
       </details>
     </section>
   </div>
@@ -111,19 +112,22 @@
 <!-- Cache-busting: every module URL carries the app version (updated by tools/version.sh). -->
 <script type="importmap">
 { "imports": {
-  "../js/version.js": "../js/version.js?v=0.12.0",
-  "../js/tags.js": "../js/tags.js?v=0.12.0",
-  "../js/ui.js": "../js/ui.js?v=0.12.0",
-  "../js/pieces.js": "../js/pieces.js?v=0.12.0",
-  "../js/relay.js": "../js/relay.js?v=0.12.0",
-  "../js/puzzle-core.js": "../js/puzzle-core.js?v=0.12.0",
-  "../js/board-view.js": "../js/board-view.js?v=0.12.0",
-  "../js/solver.js": "../js/solver.js?v=0.12.0",
-  "../js/share-load.js": "../js/share-load.js?v=0.12.0",
-  "../js/lesson-core.js": "../js/lesson-core.js?v=0.12.0",
-  "../vendor/chess.js": "../vendor/chess.js?v=0.12.0"
+  "../js/version.js": "../js/version.js?v=0.13.0",
+  "../js/tags.js": "../js/tags.js?v=0.13.0",
+  "../js/i18n.js": "../js/i18n.js?v=0.13.0",
+  "../js/langs.js": "../js/langs.js?v=0.13.0",
+  "../js/locales/en.js": "../js/locales/en.js?v=0.13.0",
+  "../js/ui.js": "../js/ui.js?v=0.13.0",
+  "../js/pieces.js": "../js/pieces.js?v=0.13.0",
+  "../js/relay.js": "../js/relay.js?v=0.13.0",
+  "../js/puzzle-core.js": "../js/puzzle-core.js?v=0.13.0",
+  "../js/board-view.js": "../js/board-view.js?v=0.13.0",
+  "../js/solver.js": "../js/solver.js?v=0.13.0",
+  "../js/share-load.js": "../js/share-load.js?v=0.13.0",
+  "../js/lesson-core.js": "../js/lesson-core.js?v=0.13.0",
+  "../vendor/chess.js": "../vendor/chess.js?v=0.13.0"
 } }
 </script>
-<script type="module" src="../js/lesson.js?v=0.12.0"></script>
+<script type="module" src="../js/lesson.js?v=0.13.0"></script>
 </body>
 </html>

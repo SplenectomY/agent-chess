@@ -2,6 +2,7 @@
 // or ?example=<name> (a file in the page's examples/ folder).
 
 import { VERSION } from './version.js';
+import { t } from './i18n.js';
 import { DEFAULT_RELAY, parseNtfyLine } from './relay.js';
 import { decodeFragment, joinParts, inflate, fromBase64Url, utf8, encodeFragment } from './puzzle-core.js';
 
@@ -16,16 +17,16 @@ export async function loadShared(topicPrefix, what) {
   if (location.hash.length > 3) return decodeFragment(location.hash);
   if (example) {
     const r = await fetch(`examples/${example}.json?v=${VERSION}`);
-    if (!r.ok) throw new Error(`There's no example called "${example}".`);
+    if (!r.ok) throw new Error(t('load.noExample', { name: example }));
     return r.json();
   }
   if (id) {
     const r = await fetch(`${RELAY}/${topicPrefix}${id}/json?poll=1&since=all`, { cache: 'no-store' });
-    if (!r.ok) throw new Error(`The relay answered ${r.status}.`);
+    if (!r.ok) throw new Error(t('load.relay', { status: r.status }));
     const events = (await r.text()).split('\n').map(parseNtfyLine).filter(Boolean);
     const enc = joinParts(events);
     if (!enc) {
-      const e = new Error(`This ${what} link has expired or never existed. Short links last about 12 hours. Ask whoever sent it for the permanent link.`);
+      const e = new Error(t(what === 'lesson' ? 'load.expiredLesson' : 'load.expiredPuzzle'));
       e.expired = true;
       throw e;
     }

@@ -31,6 +31,7 @@
 
 import { Chess } from '../vendor/chess.js';
 import { TAGS, tagKey } from './tags.js';
+import { baseLang, langNameEnglish } from './langs.js';
 
 export { TAGS };
 
@@ -39,7 +40,61 @@ export const PUZZLE_TOPIC_PREFIX = 'agentchess-puzzle-v1-';
 export const ID_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789';
 const TEXT_MAX = 2000;
 
-export const str = (v, max = TEXT_MAX) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+// ---------- text, possibly in several languages ----------
+// Any text field can be a string or a map of language code -> string:
+//   "explain": "Back-rank mate."      or      "explain": { "en": "Back-rank mate.", "es": "Mate del pasillo." }
+// str() trims and returns either form ('' if empty). While a puzzle or lesson is validated,
+// maps are counted per language so missing translations can be reported.
+let langStats = null;
+export function str(v, max = TEXT_MAX) {
+  if (typeof v === 'string') return v.trim().slice(0, max);
+  if (!isTextMap(v)) return '';
+  const out = {};
+  for (const [k, val] of Object.entries(v)) {
+    const code = baseLang(k);
+    const text = typeof val === 'string' ? val.trim().slice(0, max) : '';
+    if (code && text) out[code] = text;
+  }
+  const keys = Object.keys(out);
+  if (!keys.length) return '';
+  if (langStats) {
+    langStats.maps++;
+    for (const k of keys) langStats.per[k] = (langStats.per[k] || 0) + 1;
+  }
+  return out;
+}
+
+// { "en": "...", "es": "..." } (every key a language code, every value a string).
+export function isTextMap(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return false;
+  const keys = Object.keys(v);
+  return keys.length > 0 && keys.every((k) => /^[a-z]{2,3}([-_][a-z0-9]+)*$/i.test(k) && !['text', 'tag', 'move'].includes(k)) && Object.values(v).every((x) => typeof x === 'string');
+}
+
+// The text in one language: exact, then `main`, then English, then any.
+export function textIn(v, code = 'en', main = 'en') {
+  if (typeof v === 'string') return v;
+  if (!v || typeof v !== 'object') return '';
+  return v[code] ?? v[main] ?? v.en ?? Object.values(v)[0] ?? '';
+}
+
+export function beginLangs() { langStats = { maps: 0, per: {} }; }
+
+// Finish counting: returns { lang, langs } and pushes warnings for incomplete translations.
+// `declared` is the author's "lang" (the language of plain-string fields).
+export function endLangs(declared, firstMap, warnings) {
+  const st = langStats || { maps: 0, per: {} };
+  langStats = null;
+  const main = baseLang(declared) || (firstMap && typeof firstMap === 'object' ? Object.keys(firstMap)[0] : '') || 'en';
+  const others = Object.keys(st.per).filter((k) => k !== main).sort((a, b) => st.per[b] - st.per[a]);
+  for (const k of [main, ...others]) {
+    const have = st.per[k] || 0;
+    if (st.maps && have < st.maps && (k !== main || have > 0)) {
+      warnings.push(`${langNameEnglish(k)} (${k}) is missing from ${st.maps - have} of ${st.maps} translated text(s); those show in another language.`);
+    }
+  }
+  return { lang: main, langs: [main, ...others] };
+}
 
 export function tryMove(chess, text) {
   if (typeof text !== 'string' || !text.trim()) return null;
@@ -92,7 +147,7 @@ export function validateLine({ fen, line, opponentFirst = false, errors, warning
         if (!m) { warnings.push(`${where}: ${what} reply "${moveText}" isn't legal there, so its arrow is left out.`); continue; }
         if (out.some((x) => x.san === m.san)) continue;
         const o = { san: m.san, from: m.from, to: m.to };
-        if (r && typeof r === 'object' && r.text) o.text = str(r.text, 300);
+        if (r && typeof r === 'object' && r.text) { const tx = str(r.text, 300); if (tx) o.text = tx; }
         out.push(o);
       }
       return out.length ? out : undefined;
@@ -121,7 +176,8 @@ export function validateLine({ fen, line, opponentFirst = false, errors, warning
       if (step.wrong && typeof step.wrong === 'object') {
         const wrong = {};
         for (const [k, v] of Object.entries(step.wrong)) {
-          const obj = v && typeof v === 'object' ? v : { text: v };
+          // Text, a translated text map, or { text, tag, replies }.
+          const obj = v && typeof v === 'object' && !isTextMap(v) ? v : { text: v };
           const entry = { text: str(obj.text) };
           const wtag = tagOf(obj.tag, `wrong move "${k}"`);
           if (wtag) entry.tag = wtag;
@@ -161,6 +217,7 @@ export function validatePuzzle(input) {
     try { p = JSON.parse(p); } catch (e) { return { ok: false, errors: [`Not valid JSON: ${e.message}`], warnings, puzzle: null }; }
   }
   if (!p || typeof p !== 'object') return { ok: false, errors: ['The puzzle must be a JSON object.'], warnings, puzzle: null };
+  beginLangs();
   const chess = new Chess();
   try {
     chess.load(String(p.fen || ''));
@@ -174,16 +231,23 @@ export function validatePuzzle(input) {
   if (steps.length && !errors.length && !steps[steps.length - 1].solver) {
     warnings.push("The line ends with the opponent's move. Usually a puzzle ends on the solver's move.");
   }
+  const title = str(p.title, 120);
+  const author = str(p.author, 60);
+  const intro = str(p.intro);
+  const conclusion = str(p.conclusion, 4000);
+  const { lang, langs } = endLangs(p.lang, title || intro, warnings);
   const puzzle = errors.length ? null : {
     v: PUZZLE_VERSION,
-    title: str(p.title, 120) || 'Puzzle',
-    author: str(p.author, 60),
+    lang,
+    langs,
+    title: title || 'Puzzle',
+    author,
     fen: new Chess(String(p.fen)).fen(),
-    intro: str(p.intro),
+    intro,
     opponentFirst,
     solverColor,
     line: steps,
-    conclusion: str(p.conclusion, 4000),
+    conclusion,
   };
   return { ok: !errors.length, errors, warnings, puzzle };
 }

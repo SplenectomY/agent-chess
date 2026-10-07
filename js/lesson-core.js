@@ -22,7 +22,7 @@
 // A slide without "fen" continues from where the previous slide ended (after its task, if any).
 
 import { Chess } from '../vendor/chess.js';
-import { validateLine, tryMove, str, TAGS, PUZZLE_VERSION } from './puzzle-core.js';
+import { validateLine, tryMove, str, TAGS, PUZZLE_VERSION, beginLangs, endLangs } from './puzzle-core.js';
 import { tagKey } from './tags.js';
 
 export const LESSON_TOPIC_PREFIX = 'agentchess-lesson-v1-';
@@ -46,6 +46,7 @@ export function validateLesson(input) {
     try { p = JSON.parse(p); } catch (e) { return { ok: false, errors: [`Not valid JSON: ${e.message}`], warnings, lesson: null }; }
   }
   if (!p || typeof p !== 'object') return { ok: false, errors: ['The lesson must be a JSON object.'], warnings, lesson: null };
+  beginLangs();
   let chess;
   try {
     chess = p.fen ? loadFen(p.fen) : new Chess();
@@ -135,16 +136,21 @@ export function validateLesson(input) {
     return out;
   });
 
+  const title = str(p.title, 120);
+  const head = { author: str(p.author, 60), level: str(p.level, 40), primer: str(p.primer, 8000), conclusion: str(p.conclusion, 4000) };
+  const { lang, langs } = endLangs(p.lang, title || head.primer, warnings);
   const lesson = errors.length ? null : {
     v: PUZZLE_VERSION,
-    title: str(p.title, 120) || 'Lesson',
-    author: str(p.author, 60),
-    level: str(p.level, 40),
-    primer: str(p.primer, 8000),
+    lang,
+    langs,
+    title: title || 'Lesson',
+    author: head.author,
+    level: head.level,
+    primer: head.primer,
     fen: startFen,
     orientation,
     slides,
-    conclusion: str(p.conclusion, 4000),
+    conclusion: head.conclusion,
   };
   return { ok: !errors.length, errors, warnings, lesson };
 }

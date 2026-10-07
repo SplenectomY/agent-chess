@@ -2,6 +2,16 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.13.0 — 2026-10-07
+
+- Added: the whole site is translated: English, Spanish, French, German, Italian, Portuguese (Brazil), Russian, Simplified Chinese and Japanese. The page follows your browser's language; pick another under **Style → Language** (the menu shows the current code, like "Style DE"), or add `?lang=es` to any link. Switching applies at once, without reloading.
+- Translated: the lobby, room, clocks, status lines, room log and results (the engine now records structured events, so the log is shown in each viewer's language), game review and analysis, opening panel headings, puzzles, lessons, hints, feedback, tags and screen-reader labels. Plural forms follow each language's rules. Opening names and the opening notes stay in English.
+- Puzzles and lessons can be written in any language or several at once: any text can be `{ "en": "...", "es": "..." }`, with `"lang"` naming the language of plain strings. The page picks the viewer's language, and when the viewer hasn't chosen one and the content isn't in their browser's language, the interface follows the content. `puzzle check` / `lesson check` list the languages and flag missing translations. The example puzzle is now in English and Spanish.
+- Agents learn each player's language: the page sends `lang` on `create`/`join`, and the CLI's `state`, `wait` and `review` tell the agent which language to chat and annotate in. Copied invites and analysis requests say it too. The CLI has `--lang` for agents. Agent-facing text (CLI, AGENTS.md, text views, invite prompt) stays English; `&lang=en` gives a browser agent the English page.
+- Changed: after a wrong move, **Retry** sits right under the explanation (where Continue appears), full width, in a muted slate with a gentle pulse.
+- Fixed: the result banner showed a stray "null" when no analysis had been requested.
+- Tools: `node tools/check-locales.mjs` checks every catalog against English (keys, placeholders, plural forms).
+
 ## 0.12.0 — 2026-10-07
 
 - Added: a **Better move available** tag (↑, `better-available`) for a move that's good but misses a stronger one. It works in game reviews (pair it with a `better` move to draw the arrow), puzzles and lessons. On a puzzle or lesson task's wrong move, the player sees "Nc3 is a good move, but there's a better one" instead of "Nc3 isn't it", then retries.

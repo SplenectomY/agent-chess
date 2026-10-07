@@ -7,7 +7,8 @@ import { $, el, copy, wireStyleMenu } from './ui.js';
 import { TAGS } from './tags.js';
 import { validateLesson, LESSON_TOPIC_PREFIX } from './lesson-core.js';
 import { drawBoard, wireBoardInput, askPromotion, parseTyped } from './board-view.js';
-import { Solver, COLOR, renderFeedback, solverButtons, continueButton } from './solver.js';
+import { Solver, renderFeedback, solverButtons, continueButton } from './solver.js';
+import { t, loc, colorName, setLang, chooseLang, onLangChange, wireLangPicker, setContentLang } from './i18n.js';
 import { loadShared, permanentLink } from './share-load.js';
 
 const L = {
@@ -39,7 +40,7 @@ function inline(text) {
 
 function rich(text) {
   const nodes = [];
-  for (const block of String(text || '').split(/\n\s*\n/)) {
+  for (const block of String(loc(text) || '').split(/\n\s*\n/)) {
     const lines = block.split('\n').map((l) => l.trim()).filter(Boolean);
     let list = null;
     let para = [];
@@ -181,31 +182,31 @@ function render() {
 
   // Line above the board.
   let turn;
-  if (L.finished) turn = 'Lesson complete';
+  if (L.finished) turn = t('ls.complete');
   else if (S) turn = S.statusText();
   else if (s.moves.length) {
-    turn = el('span', {}, movesLabel(s), s.tag ? el('span', { class: `sym tag-${s.tag}`, title: TAGS[s.tag].label, text: TAGS[s.tag].symbol }) : null);
+    turn = el('span', {}, movesLabel(s), s.tag ? el('span', { class: `sym tag-${s.tag}`, title: t(`tag.${s.tag}`), text: TAGS[s.tag].symbol }) : null);
   }
-  else turn = `${COLOR[new Chess(s.fen).turn()]} to move`;
+  else turn = t('sv.toMove', { color: new Chess(s.fen).turn() });
   $('ls-turn').replaceChildren(el('span', { class: `pb-swatch ${S ? S.solverColor : new Chess(s.fen).turn()}`, 'aria-hidden': 'true' }), turn);
 
   // Slide panel.
   $('ls-slide').hidden = L.finished;
-  $('ls-slide-kicker').textContent = `Slide ${L.idx + 1} of ${n}${s.task ? ' · your turn' : ''}`;
-  $('ls-slide-title').textContent = s.title;
+  $('ls-slide-kicker').textContent = `${t('ls.slideOf', { i: L.idx + 1, n })}${s.task ? ` · ${t('ls.yourTurnTag')}` : ''}`;
+  $('ls-slide-title').textContent = loc(s.title);
   $('ls-slide-title').hidden = !s.title;
   $('ls-slide-text').replaceChildren(...rich(s.text));
   $('ls-task').hidden = !S;
   if (S) {
-    $('ls-task-head').replaceChildren(el('span', { class: `pb-swatch ${S.solverColor}`, 'aria-hidden': 'true' }), S.solved ? 'Task solved' : `Your turn: ${COLOR[S.solverColor]} to move`);
-    $('ls-task-prompt').replaceChildren(...rich(s.task.prompt || 'Find the best move.'));
-    renderFeedback($('ls-feedback'), S.feedback, 'Make your move on the board or type it below.');
+    $('ls-task-head').replaceChildren(el('span', { class: `pb-swatch ${S.solverColor}`, 'aria-hidden': 'true' }), S.solved ? t('ls.taskSolved') : t('ls.yourTurn', { color: S.solverColor }));
+    $('ls-task-prompt').replaceChildren(...rich(s.task.prompt || t('ls.defaultPrompt')));
+    renderFeedback($('ls-feedback'), S.feedback, t('sv.emptyFeedback'));
     if (S.solved && s.task.done) $('ls-feedback').append(el('div', { class: 'ls-done-note rich' }, ...rich(s.task.done)));
-    $('ls-progress').replaceChildren(...continueButton(S));
+    $('ls-progress').replaceChildren(...continueButton(S, { onRetry: () => { if (canMove()) $('move-input').focus(); } }));
     $('move-form').hidden = S.solved;
     $('move-input').disabled = !canMove();
     const acts = solverButtons(S, { onRetry: () => { if (canMove()) $('move-input').focus(); } });
-    if (S.started && !S.busy) acts.push(el('button', { class: 'btn', type: 'button', text: S.solved ? 'Try it again' : 'Reset position', onclick: () => S.restart() }));
+    if (S.started && !S.busy) acts.push(el('button', { class: 'btn', type: 'button', text: S.solved ? t('ls.tryItAgain') : t('ls.resetPosition'), onclick: () => S.restart() }));
     $('ls-task-actions').replaceChildren(...acts);
   }
 
@@ -218,12 +219,12 @@ function render() {
     const hints = solvers.reduce((a, x) => a + x.hintsUsed, 0);
     const tasks = ls.slides.filter((x) => x.task).length;
     end.replaceChildren(
-      el('h2', { text: 'Lesson complete' }),
-      tasks ? el('p', { class: 'pz-stats', text: `${tasks} task${tasks === 1 ? '' : 's'} solved with ${mistakes} mistake${mistakes === 1 ? '' : 's'} and ${hints} hint${hints === 1 ? '' : 's'}.` }) : null,
+      el('h2', { text: t('ls.complete') }),
+      tasks ? el('p', { class: 'pz-stats', text: t('ls.stats', { tasks: t('ls.tasks', { n: tasks }), mistakes: t('pz.mistakes', { n: mistakes }), hints: t('pz.hints', { n: hints }) }) }) : null,
       ls.conclusion ? el('div', { class: 'rich' }, ...rich(ls.conclusion)) : null,
       el('div', { class: 'actions-row' },
-        el('button', { class: 'btn', type: 'button', text: '◀ Back to the last slide', onclick: prev }),
-        el('button', { class: 'btn primary', type: 'button', text: 'Start over', onclick: restartLesson })),
+        el('button', { class: 'btn', type: 'button', text: t('ls.backToLast'), onclick: prev }),
+        el('button', { class: 'btn primary', type: 'button', text: t('common.startOver'), onclick: restartLesson })),
     );
   }
 
@@ -233,17 +234,17 @@ function render() {
   const locked = !!S && !S.solved;
   const nextBtn = $('ls-next');
   nextBtn.disabled = L.finished || locked;
-  nextBtn.textContent = L.idx === n - 1 ? 'Finish ✓' : 'Next ▶';
+  nextBtn.textContent = L.idx === n - 1 ? t('ls.finish') : t('ls.next');
   nextBtn.classList.toggle('go', !nextBtn.disabled);
   // A second Next right under the slide text, where the reader's eyes already are.
   $('ls-inline-next').replaceChildren(...(L.finished || locked ? [] : [el('button', { class: 'btn go wide', type: 'button', id: 'ls-next-inline', onclick: next },
-    L.idx === n - 1 ? 'Finish the lesson' : 'Next slide', el('span', { 'aria-hidden': 'true', text: L.idx === n - 1 ? '✓' : '▶' }))]));
-  nextBtn.title = locked ? 'Solve the task to go on' : '';
+    L.idx === n - 1 ? t('ls.finishLesson') : t('ls.nextSlide'), el('span', { 'aria-hidden': 'true', text: L.idx === n - 1 ? '✓' : '▶' }))]));
+  nextBtn.title = locked ? t('ls.locked') : '';
   $('ls-count').textContent = `${L.idx + 1} / ${n}`;
   $('ls-dots').replaceChildren(...ls.slides.map((x, i) => el('button', {
     class: ['ls-dot', i <= L.seen && 'seen', x.task && 'task', i === L.idx && !L.finished && 'current'].filter(Boolean).join(' '),
-    type: 'button', disabled: i > reach, 'aria-label': `Slide ${i + 1}${x.title ? `: ${x.title}` : ''}${x.task ? ' (task)' : ''}`,
-    title: `${i + 1}. ${x.title || (x.task ? 'Task' : 'Slide')}`, onclick: () => go(i),
+    type: 'button', disabled: i > reach, 'aria-label': `${t(x.task ? 'ls.dotTask' : 'ls.dot', { i: i + 1 })}${x.title ? `: ${loc(x.title)}` : ''}`,
+    title: `${i + 1}. ${loc(x.title) || t(x.task ? 'ls.dotTask' : 'ls.dot', { i: i + 1 })}`, onclick: () => go(i),
   })));
   renderTextState();
 }
@@ -252,8 +253,8 @@ function renderTextState() {
   const s = slide();
   const S = solverFor(L.idx);
   const lines = [
-    `Lesson: ${L.ls.title}${L.ls.author ? ` by ${L.ls.author}` : ''}`,
-    L.finished ? 'Lesson complete.' : `Slide ${L.idx + 1} of ${L.ls.slides.length}${s.title ? `: ${s.title}` : ''}`,
+    `Lesson: ${loc(L.ls.title)}${L.ls.author ? ` by ${loc(L.ls.author)}` : ''}`,
+    L.finished ? 'Lesson complete.' : `Slide ${L.idx + 1} of ${L.ls.slides.length}${s.title ? `: ${loc(s.title)}` : ''}`,
   ];
   if (!L.finished) {
     if (s.moves.length) lines.push(`Moves on this slide: ${movesLabel(s)}${s.tag ? ` (${TAGS[s.tag].label})` : ''}`);
@@ -262,7 +263,7 @@ function renderTextState() {
       if (s.highlights.length) lines.push(`Highlighted: ${s.highlights.map((h) => `${h.sq} (${h.color})`).join(', ')}`);
     }
     if (S) {
-      lines.push(`Task: ${COLOR[S.solverColor]} to move.${S.solved ? ' Solved.' : ' Solve it to unlock Next.'}`, ...S.textLines());
+      lines.push(`Task: ${S.solverColor === 'w' ? 'White' : 'Black'} to move.${S.solved ? ' Solved.' : ' Solve it to unlock Next.'}`, ...S.textLines());
     } else {
       lines.push(`FEN: ${s.fen}`, L.idx < L.ls.slides.length - 1 ? 'Press Next to continue.' : 'Press Finish to end the lesson.');
     }
@@ -292,7 +293,8 @@ function wireInput() {
     if (!canMove() || !input.value.trim()) return;
     const mv = parseTyped(S.chess, input.value);
     if (!mv) {
-      S.feedback.push({ kind: 'bad', text: `"${input.value.trim()}" isn't a legal move here.` });
+      const typed = input.value.trim();
+      S.feedback.push({ kind: 'bad', msg: () => t('sv.illegalTyped', { text: typed }) });
       render();
       return;
     }
@@ -304,7 +306,7 @@ function wireInput() {
   $('ls-restart').addEventListener('click', restartLesson);
   $('ls-copy').addEventListener('click', async () => {
     const link = await permanentLink(L.source);
-    copy(link, location.hash || !L.source ? 'Link copied' : 'Permanent link copied');
+    copy(link, location.hash || !L.source ? t('common.linkCopied') : t('common.permanentLinkCopied'));
   });
   document.addEventListener('keydown', (e) => {
     if (e.target.closest && e.target.closest('input, textarea, select, [contenteditable]')) return;
@@ -321,40 +323,51 @@ function showMissing(title, text) {
   $('ls-missing-text').textContent = text;
 }
 
+function renderIntro() {
+  const ls = L.ls;
+  document.title = t('ls.titleNamed', { title: loc(ls.title) });
+  const tasks = ls.slides.filter((x) => x.task).length;
+  $('ls-kicker').textContent = [ls.author ? t('ls.by', { author: loc(ls.author) }) : t('ls.title'), loc(ls.level),
+    t('ls.slides', { n: ls.slides.length }), tasks ? t('ls.tasks', { n: tasks }) : null].filter(Boolean).join(' · ');
+  $('ls-title').textContent = loc(ls.title);
+  if (ls.primer) {
+    $('ls-primer').hidden = false;
+    $('ls-primer-body').replaceChildren(...rich(ls.primer));
+  }
+}
+
 // ---------- boot ----------
-document.title = `Lesson — Agent Chess v${VERSION}`;
 $('app-version').textContent = `v${VERSION}`;
 wireStyleMenu(() => { if (L.ls) renderBoard(); });
 
 let source;
+let loadError = null;
 try {
   source = await loadShared(LESSON_TOPIC_PREFIX, 'lesson');
 } catch (err) {
-  showMissing(err.expired ? 'Lesson expired' : "Couldn't load the lesson", err.message || String(err));
+  loadError = err;
   source = undefined;
 }
-if (source === null) {
-  showMissing('No lesson here', 'This link has no lesson in it. Lesson links look like …/lesson/?id=abc123xyz. Ask an agent to make one (point it at lesson/AGENTS.md), or try an example.');
-} else if (source !== undefined) {
-  const r = validateLesson(source);
-  if (!r.ok) {
-    showMissing('This lesson has a problem', r.errors.join(' '));
-  } else {
-    L.ls = r.lesson;
-    L.source = source;
-    document.title = `${L.ls.title} — Agent Chess lesson`;
-    $('ls-loading').hidden = true;
-    $('ls-game').hidden = false;
-    const tasks = L.ls.slides.filter((x) => x.task).length;
-    $('ls-kicker').textContent = [L.ls.author ? `Lesson by ${L.ls.author}` : 'Lesson', L.ls.level,
-      `${L.ls.slides.length} slide${L.ls.slides.length === 1 ? '' : 's'}`, tasks ? `${tasks} task${tasks === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ');
-    $('ls-title').textContent = L.ls.title;
-    if (L.ls.primer) {
-      $('ls-primer').hidden = false;
-      $('ls-primer').open = true;
-      $('ls-primer-body').replaceChildren(...rich(L.ls.primer));
-    }
-    wireInput();
-    go(0);
-  }
+const checked = source ? validateLesson(source) : null;
+// The interface follows the viewer's choice, else the browser, else the lesson's own language.
+await setLang(chooseLang(checked && checked.ok ? checked.lesson.langs : []));
+wireLangPicker();
+document.title = `${t('ls.title')} — Agent Chess v${VERSION}`;
+if (loadError) {
+  showMissing(loadError.expired ? t('ls.expired') : t('ls.loadFailed'), loadError.expired ? t('load.expiredLesson') : loadError.message || String(loadError));
+} else if (source === null) {
+  showMissing(t('ls.noneTitle'), t('ls.noneText'));
+} else if (!checked.ok) {
+  showMissing(t('ls.problem'), checked.errors.join(' '));
+} else {
+  L.ls = checked.lesson;
+  L.source = source;
+  setContentLang(L.ls.lang);
+  $('ls-loading').hidden = true;
+  $('ls-game').hidden = false;
+  renderIntro();
+  $('ls-primer').open = true;
+  wireInput();
+  go(0);
 }
+onLangChange(() => { if (L.ls) { renderIntro(); render(); } });

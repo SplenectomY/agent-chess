@@ -7,7 +7,8 @@ import { $, el, copy, wireStyleMenu } from './ui.js';
 import { TAGS } from './tags.js';
 import { validatePuzzle, PUZZLE_TOPIC_PREFIX } from './puzzle-core.js';
 import { drawBoard, wireBoardInput, askPromotion, parseTyped } from './board-view.js';
-import { Solver, COLOR, renderFeedback, solverButtons, continueButton } from './solver.js';
+import { Solver, renderFeedback, solverButtons, continueButton } from './solver.js';
+import { t, loc, setLang, chooseLang, onLangChange, wireLangPicker, setContentLang } from './i18n.js';
 import { loadShared, permanentLink } from './share-load.js';
 
 const P = {
@@ -50,13 +51,13 @@ function render() {
   const S = P.S;
   renderBoard();
   $('pz-turn').replaceChildren(el('span', { class: `pb-swatch ${P.pz.solverColor}`, 'aria-hidden': 'true' }), S.statusText());
-  renderFeedback($('pz-feedback'), S.feedback, 'Make your move on the board or type it below.');
-  $('pz-progress').replaceChildren(...continueButton(S));
+  renderFeedback($('pz-feedback'), S.feedback, t('sv.emptyFeedback'));
+  $('pz-progress').replaceChildren(...continueButton(S, { onRetry: () => { if (canMove()) $('move-input').focus(); } }));
   $('move-form').hidden = S.solved;
   $('move-input').disabled = !canMove();
   const acts = solverButtons(S, { onRetry: () => { if (canMove()) $('move-input').focus(); } });
-  if (!S.solved) acts.push(el('button', { class: 'btn', type: 'button', text: 'Start over', onclick: restart }));
-  acts.push(el('button', { class: 'btn', type: 'button', text: 'Copy link', onclick: copyLink }));
+  if (!S.solved) acts.push(el('button', { class: 'btn', type: 'button', text: t('common.startOver'), onclick: restart }));
+  acts.push(el('button', { class: 'btn', type: 'button', text: t('common.copyLink'), onclick: copyLink }));
   $('pz-actions').replaceChildren(...acts);
   renderDone();
   renderTextState();
@@ -75,33 +76,33 @@ function renderDone() {
   const pz = P.pz;
   const revealed = Object.keys(S.revealed).length;
   const clean = !S.mistakes && !S.hintsUsed && !revealed;
-  const stats = clean ? 'Solved with no mistakes and no hints.' : `Solved with ${S.mistakes} mistake${S.mistakes === 1 ? '' : 's'} and ${S.hintsUsed} hint${S.hintsUsed === 1 ? '' : 's'}${revealed ? ', answer revealed' : ''}.`;
+  const stats = clean ? t('pz.statsClean') : t(revealed ? 'pz.statsRevealed' : 'pz.stats', { mistakes: t('pz.mistakes', { n: S.mistakes }), hints: t('pz.hints', { n: S.hintsUsed }) });
   const lineItems = pz.line.map((st, i) => {
     const c = new Chess(st.fenBefore);
     const num = c.moveNumber();
     const label = c.turn() === 'w' ? `${num}. ${st.move}` : `${num}... ${st.move}`;
     return el('li', { class: st.solver ? 'mine' : 'theirs' },
       el('button', { class: 'op-move' + (P.replay === i + 1 ? ' current' : ''), type: 'button', onclick: () => { P.replay = i + 1; render(); } },
-        label, st.tag ? el('span', { class: `sym tag-${st.tag}`, title: TAGS[st.tag].label, text: TAGS[st.tag].symbol }) : null),
-      st.explain ? el('span', { text: ' ' + st.explain }) : null);
+        label, st.tag ? el('span', { class: `sym tag-${st.tag}`, title: t(`tag.${st.tag}`), text: TAGS[st.tag].symbol }) : null),
+      st.explain ? el('span', { text: ' ' + loc(st.explain) }) : null);
   });
   box.replaceChildren(
-    el('h2', { text: clean ? 'Solved! Perfect.' : 'Solved!' }),
+    el('h2', { text: clean ? t('pz.solvedPerfect') : t('pz.solved') }),
     el('p', { class: 'pz-stats', text: stats }),
-    pz.conclusion ? el('div', { class: 'pz-conclusion' }, el('h3', { text: 'The idea' }), el('p', { text: pz.conclusion })) : null,
-    el('h3', { text: 'Full solution' }),
+    pz.conclusion ? el('div', { class: 'pz-conclusion' }, el('h3', { text: t('pz.idea') }), el('p', { text: loc(pz.conclusion) })) : null,
+    el('h3', { text: t('pz.fullSolution') }),
     el('ol', { class: 'pz-line' }, ...lineItems),
     el('div', { class: 'actions-row' },
-      el('button', { class: 'btn', type: 'button', text: '◀', 'aria-label': 'Previous position', disabled: (P.replay ?? pz.line.length) === 0, onclick: () => { P.replay = Math.max(0, (P.replay ?? pz.line.length) - 1); render(); } }),
-      el('button', { class: 'btn', type: 'button', text: '▶', 'aria-label': 'Next position', disabled: P.replay == null || P.replay >= pz.line.length, onclick: () => { P.replay = Math.min(pz.line.length, (P.replay ?? pz.line.length) + 1); if (P.replay === pz.line.length) P.replay = null; render(); } }),
-      el('button', { class: 'btn primary', type: 'button', text: 'Try again', onclick: restart })),
+      el('button', { class: 'btn', type: 'button', text: '◀', 'aria-label': t('pz.prevPos'), disabled: (P.replay ?? pz.line.length) === 0, onclick: () => { P.replay = Math.max(0, (P.replay ?? pz.line.length) - 1); render(); } }),
+      el('button', { class: 'btn', type: 'button', text: '▶', 'aria-label': t('pz.nextPos'), disabled: P.replay == null || P.replay >= pz.line.length, onclick: () => { P.replay = Math.min(pz.line.length, (P.replay ?? pz.line.length) + 1); if (P.replay === pz.line.length) P.replay = null; render(); } }),
+      el('button', { class: 'btn primary', type: 'button', text: t('pz.tryAgain'), onclick: restart })),
   );
 }
 
 function renderTextState() {
   const lines = [
-    `Puzzle: ${P.pz.title}${P.pz.author ? ` by ${P.pz.author}` : ''}`,
-    `You play: ${COLOR[P.pz.solverColor]}`,
+    `Puzzle: ${loc(P.pz.title)}${P.pz.author ? ` by ${loc(P.pz.author)}` : ''}`,
+    `You play: ${P.pz.solverColor === 'w' ? 'White' : 'Black'}`,
     ...P.S.textLines(),
   ];
   $('text-state').textContent = lines.join('\n');
@@ -109,7 +110,7 @@ function renderTextState() {
 
 async function copyLink() {
   const link = await permanentLink(P.source);
-  copy(link, location.hash || !P.source ? 'Link copied' : 'Permanent link copied');
+  copy(link, location.hash || !P.source ? t('common.linkCopied') : t('common.permanentLinkCopied'));
 }
 
 // ---------- input ----------
@@ -132,7 +133,8 @@ function wireInput() {
     if (!canMove() || !input.value.trim()) return;
     const mv = parseTyped(P.S.chess, input.value);
     if (!mv) {
-      P.S.feedback.push({ kind: 'bad', text: `"${input.value.trim()}" isn't a legal move here.` });
+      const typed = input.value.trim();
+      P.S.feedback.push({ kind: 'bad', msg: () => t('sv.illegalTyped', { text: typed }) });
       render();
       return;
     }
@@ -141,36 +143,47 @@ function wireInput() {
   });
 }
 
+function renderIntro() {
+  const pz = P.pz;
+  document.title = t('pz.titleNamed', { title: loc(pz.title) });
+  const toFind = pz.line.filter((x) => x.solver).length;
+  $('pz-kicker').textContent = `${pz.author ? t('pz.by', { author: loc(pz.author) }) : t('pz.title')}, ${t('pz.toFind', { n: toFind })}`;
+  $('pz-title').textContent = loc(pz.title);
+  $('pz-intro').textContent = loc(pz.intro) || t('pz.defaultIntro', { color: pz.solverColor });
+}
+
 // ---------- boot ----------
-document.title = `Puzzle — Agent Chess v${VERSION}`;
 $('app-version').textContent = `v${VERSION}`;
 wireStyleMenu(() => { if (P.S) renderBoard(); });
 
 let source;
+let loadError = null;
 try {
   source = await loadShared(PUZZLE_TOPIC_PREFIX, 'puzzle');
 } catch (err) {
-  showMissing(err.expired ? 'Puzzle expired' : "Couldn't load the puzzle", err.message || String(err));
+  loadError = err;
   source = undefined;
 }
-if (source === null) {
-  showMissing('No puzzle here', 'This link has no puzzle in it. Puzzle links look like …/puzzle/?id=abc123xyz. Ask an agent to make one (see puzzle/AGENTS.md), or try the example.');
-} else if (source !== undefined) {
-  const r = validatePuzzle(source);
-  if (!r.ok) {
-    showMissing('This puzzle has a problem', r.errors.join(' '));
-  } else {
-    P.pz = r.puzzle;
-    P.source = source;
-    document.title = `${P.pz.title} — Agent Chess puzzle`;
-    $('pz-loading').hidden = true;
-    $('pz-game').hidden = false;
-    const toFind = P.pz.line.filter((s) => s.solver).length;
-    $('pz-kicker').textContent = `${P.pz.author ? `Puzzle by ${P.pz.author}` : 'Puzzle'}, ${toFind} move${toFind === 1 ? '' : 's'} to find`;
-    $('pz-title').textContent = P.pz.title;
-    $('pz-intro').textContent = P.pz.intro || `${COLOR[P.pz.solverColor]} to move. Find the best continuation.`;
-    P.S = new Solver({ fen: P.pz.fen, line: P.pz.line, solverColor: P.pz.solverColor, opponentFirst: P.pz.opponentFirst, onChange: render });
-    wireInput();
-    render();
-  }
+const checked = source ? validatePuzzle(source) : null;
+// The interface follows the viewer's choice, else the browser, else the puzzle's own language.
+await setLang(chooseLang(checked && checked.ok ? checked.puzzle.langs : []));
+wireLangPicker();
+document.title = `${t('pz.title')} — Agent Chess v${VERSION}`;
+if (loadError) {
+  showMissing(loadError.expired ? t('pz.expired') : t('pz.loadFailed'), loadError.expired ? t('load.expiredPuzzle') : loadError.message || String(loadError));
+} else if (source === null) {
+  showMissing(t('pz.noneTitle'), t('pz.noneText'));
+} else if (!checked.ok) {
+  showMissing(t('pz.problem'), checked.errors.join(' '));
+} else {
+  P.pz = checked.puzzle;
+  P.source = source;
+  setContentLang(P.pz.lang);
+  $('pz-loading').hidden = true;
+  $('pz-game').hidden = false;
+  renderIntro();
+  P.S = new Solver({ fen: P.pz.fen, line: P.pz.line, solverColor: P.pz.solverColor, opponentFirst: P.pz.opponentFirst, onChange: render });
+  wireInput();
+  render();
 }
+onLangChange(() => { if (P.S) { renderIntro(); render(); } });

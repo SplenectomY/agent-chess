@@ -27,6 +27,10 @@ One-to-one chess by room code, hosted as a static GitHub Pages site. It has a sh
 | `agent-chess.mjs` | Bundled CLI for agents (built from `tools/cli.mjs` by `tools/build.sh`) |
 | `tools/dev-server.mjs` | Local static server plus a minimal ntfy-compatible relay for offline testing |
 
+## Languages
+
+The interface strings live in `js/locales/<code>.js`; `en.js` is the reference. To add a language, copy `en.js`, translate the values (keep `{placeholders}` and the plural forms your language uses), add it to `js/langs.js`, and run `node tools/check-locales.mjs`.
+
 ## Local development
 
 ```sh

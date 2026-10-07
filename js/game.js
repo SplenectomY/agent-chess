@@ -10,6 +10,7 @@
 
 import { Chess } from '../vendor/chess.js';
 import { TAGS, tagKey } from './tags.js';
+import { baseLang, langNameEnglish } from './langs.js';
 
 export const PROTOCOL_VERSION = 1;
 // Time that may pass after a clock reaches zero before the side is flagged.
@@ -41,6 +42,12 @@ export function describeTimeControl(tc) {
   const mins = tc.initial / 60000;
   const m = Number.isInteger(mins) ? String(mins) : mins.toFixed(1).replace(/\.0$/, '');
   return `${m} min + ${inc}`;
+}
+
+// A language code like "es" or "pt-BR" -> "es" / "pt"; anything else -> null.
+function cleanLang(v) {
+  const b = baseLang(v);
+  return b || null;
 }
 
 function cleanText(s, max) {
@@ -78,8 +85,10 @@ export const isActive = (s) => s.started && !s.result;
 export const turn = (s) => s.chess.turn();
 export const playerName = (s, c) => (s.players[c] ? s.players[c].name : colorName(c));
 
-function system(s, time, text) {
-  s.feed.push({ time, kind: 'system', text });
+// A room-log line. `text` is English (the CLI and agents read it); `key`/`vars` let the page
+// show it in the viewer's language (keys in js/locales/en.js under "log.").
+function system(s, time, text, key = null, vars = null) {
+  s.feed.push({ time, kind: 'system', text, key, vars });
 }
 
 // Does `color` have enough material that a checkmate is still possible?
@@ -103,13 +112,15 @@ function canStillMate(chess, color) {
   return false;
 }
 
-function finish(s, winner, reason, time) {
-  s.result = { winner, reason, time };
+// code: checkmate | stalemate | insufficient | threefold | fifty | agreed | resigned | timeout |
+// timeoutDraw. `reason` is the English text; code + vars let the page translate it.
+function finish(s, winner, reason, time, code, vars = {}) {
+  s.result = { winner, reason, time, code, vars };
   s.drawOffer = null;
   const text = winner
     ? `${playerName(s, winner)} (${colorName(winner)}) wins — ${reason}.`
     : `Draw — ${reason}.`;
-  system(s, time, text);
+  system(s, time, text, winner ? 'win' : 'drawResult', { name: playerName(s, winner), color: winner, code, ...vars });
 }
 
 // Remaining time for each side at server time `now` (ms). null when untimed.
@@ -132,8 +143,9 @@ function checkFlag(s, time) {
   const fellAt = s.turnStart + s.clock[side];
   s.clock[side] = 0;
   const winner = other(side);
-  if (canStillMate(s.chess, winner)) finish(s, winner, `${playerName(s, side)} ran out of time`, fellAt);
-  else finish(s, null, `${playerName(s, side)} ran out of time, but ${playerName(s, winner)} cannot checkmate`, fellAt);
+  const v = { who: playerName(s, side), winnerName: playerName(s, winner) };
+  if (canStillMate(s.chess, winner)) finish(s, winner, `${playerName(s, side)} ran out of time`, fellAt, 'timeout', v);
+  else finish(s, null, `${playerName(s, side)} ran out of time, but ${playerName(s, winner)} cannot checkmate`, fellAt, 'timeoutDraw', v);
   return true;
 }
 
@@ -184,7 +196,7 @@ function startNewGame(s, time) {
   s.result = null;
   s.drawOffer = null;
   s.rematch = { w: false, b: false };
-  system(s, time, `Game ${s.game} started. ${playerName(s, 'w')} has White, ${playerName(s, 'b')} has Black.`);
+  system(s, time, `Game ${s.game} started. ${playerName(s, 'w')} has White, ${playerName(s, 'b')} has Black.`, 'started', { g: s.game, white: playerName(s, 'w'), black: playerName(s, 'b') });
 }
 
 // Apply one relay event. `ev` = { id, time (server ms), data (parsed JSON) }.
@@ -208,9 +220,9 @@ export function applyEvent(s, ev) {
       const color = d.color === 'b' ? 'b' : 'w';
       const tc = parseTimeControl(d.time);
       s.room = { host: pid, tc, createdAt: T };
-      s.players[color] = { id: pid, name: cleanText(d.name, NAME_MAX) || 'Host' };
+      s.players[color] = { id: pid, name: cleanText(d.name, NAME_MAX) || 'Host', lang: cleanLang(d.lang) };
       s.clock = tc ? { w: tc.initial, b: tc.initial } : null;
-      system(s, T, `${s.players[color].name} opened the room as ${colorName(color)} (${describeTimeControl(tc)}).`);
+      system(s, T, `${s.players[color].name} opened the room as ${colorName(color)} (${describeTimeControl(tc)}).`, 'opened', { name: s.players[color].name, color, tc });
       return;
     }
     case 'join': {
@@ -218,14 +230,15 @@ export function applyEvent(s, ev) {
       const name = cleanText(d.name, NAME_MAX);
       if (seat) {
         if (name && name !== s.players[seat].name) s.players[seat].name = name;
+        if (cleanLang(d.lang)) s.players[seat].lang = cleanLang(d.lang);
         return;
       }
       const free = !s.players.w ? 'w' : !s.players.b ? 'b' : null;
       if (!free) return; // room full: watching needs no event
-      s.players[free] = { id: pid, name: name || `Player ${free === 'w' ? 1 : 2}` };
+      s.players[free] = { id: pid, name: name || `Player ${free === 'w' ? 1 : 2}`, lang: cleanLang(d.lang) };
       s.started = true;
       s.turnStart = T; // White's clock starts once both seats are filled
-      system(s, T, `${s.players[free].name} joined as ${colorName(free)}. White to move.`);
+      system(s, T, `${s.players[free].name} joined as ${colorName(free)}. White to move.`, 'joined', { name: s.players[free].name, color: free });
       return;
     }
     case 'move': {
@@ -254,43 +267,43 @@ export function applyEvent(s, ev) {
       });
       if (s.drawOffer && s.drawOffer !== side) {
         s.drawOffer = null; // moving declines
-        system(s, T, `${playerName(s, side)} declined the draw by playing on.`);
+        system(s, T, `${playerName(s, side)} declined the draw by playing on.`, 'declinedByMoving', { name: playerName(s, side) });
       }
       const c = s.chess;
-      if (c.isCheckmate()) finish(s, side, 'checkmate', T);
-      else if (c.isStalemate()) finish(s, null, 'stalemate', T);
-      else if (c.isInsufficientMaterial()) finish(s, null, 'insufficient material', T);
-      else if (c.isThreefoldRepetition()) finish(s, null, 'threefold repetition', T);
-      else if (c.isDrawByFiftyMoves()) finish(s, null, 'fifty-move rule', T);
+      if (c.isCheckmate()) finish(s, side, 'checkmate', T, 'checkmate');
+      else if (c.isStalemate()) finish(s, null, 'stalemate', T, 'stalemate');
+      else if (c.isInsufficientMaterial()) finish(s, null, 'insufficient material', T, 'insufficient');
+      else if (c.isThreefoldRepetition()) finish(s, null, 'threefold repetition', T, 'threefold');
+      else if (c.isDrawByFiftyMoves()) finish(s, null, 'fifty-move rule', T, 'fifty');
       return;
     }
     case 'resign': {
       if (!isActive(s) || !seat) return;
       if (checkFlag(s, T)) return;
-      finish(s, other(seat), `${playerName(s, seat)} resigned`, T);
+      finish(s, other(seat), `${playerName(s, seat)} resigned`, T, 'resigned', { who: playerName(s, seat) });
       return;
     }
     case 'offer-draw': {
       if (!isActive(s) || !seat) return;
       if (checkFlag(s, T)) return;
       if (s.drawOffer === other(seat)) {
-        finish(s, null, 'agreed', T);
+        finish(s, null, 'agreed', T, 'agreed');
       } else if (s.drawOffer !== seat) {
         s.drawOffer = seat;
-        system(s, T, `${playerName(s, seat)} offers a draw.`);
+        system(s, T, `${playerName(s, seat)} offers a draw.`, 'offersDraw', { name: playerName(s, seat) });
       }
       return;
     }
     case 'accept-draw': {
       if (!isActive(s) || !seat || s.drawOffer !== other(seat)) return;
       if (checkFlag(s, T)) return;
-      finish(s, null, 'agreed', T);
+      finish(s, null, 'agreed', T, 'agreed');
       return;
     }
     case 'decline-draw': {
       if (!isActive(s) || !seat || s.drawOffer !== other(seat)) return;
       s.drawOffer = null;
-      system(s, T, `${playerName(s, seat)} declined the draw.`);
+      system(s, T, `${playerName(s, seat)} declined the draw.`, 'declinedDraw', { name: playerName(s, seat) });
       return;
     }
     case 'add-time': {
@@ -298,7 +311,7 @@ export function applyEvent(s, ev) {
       if (checkFlag(s, T)) return;
       const secs = Math.max(1, Math.min(Number(d.seconds) || 15, 600));
       s.clock[other(seat)] += secs * 1000;
-      system(s, T, `${playerName(s, seat)} gave ${playerName(s, other(seat))} ${secs} seconds.`);
+      system(s, T, `${playerName(s, seat)} gave ${playerName(s, other(seat))} ${secs} seconds.`, 'gaveTime', { name: playerName(s, seat), other: playerName(s, other(seat)), n: secs });
       return;
     }
     case 'flag': {
@@ -309,7 +322,7 @@ export function applyEvent(s, ev) {
       if (!s.result || !seat || s.rematch[seat]) return;
       s.rematch[seat] = true;
       if (s.rematch.w && s.rematch.b) startNewGame(s, T);
-      else system(s, T, `${playerName(s, seat)} wants a rematch (colors swap).`);
+      else system(s, T, `${playerName(s, seat)} wants a rematch (colors swap).`, 'rematch', { name: playerName(s, seat) });
       return;
     }
     case 'analysis-request': {
@@ -321,7 +334,7 @@ export function applyEvent(s, ev) {
       const a = analysisFor(s, g);
       if (a.requests.some((r) => r.color === color)) return;
       a.requests.push({ color, by: rec.players[color].name, time: T });
-      system(s, T, `${rec.players[color].name} asked for a post-game analysis of game ${g}.`);
+      system(s, T, `${rec.players[color].name} asked for a post-game analysis of game ${g}.`, 'askedAnalysis', { name: rec.players[color].name, g });
       return;
     }
     case 'analysis-status': {
@@ -338,10 +351,10 @@ export function applyEvent(s, ev) {
       const prev = a.status && a.status.authorId === pid ? a.status.state : null;
       if (prev === state) return;
       a.status = { state, authorId: pid, author, color, since: (a.status && a.status.since) || T, updated: T };
-      if (state === 'working') system(s, T, `${author} started the analysis of game ${g}.`);
+      if (state === 'working') system(s, T, `${author} started the analysis of game ${g}.`, 'analysisStarted', { name: author, g });
       else {
         const n = noteCount(s, g);
-        system(s, T, `${author} finished the analysis of game ${g} (${n} comment${n === 1 ? '' : 's'}).`);
+        system(s, T, `${author} finished the analysis of game ${g} (${n} comment${n === 1 ? '' : 's'}).`, 'analysisDone', { name: author, g, n });
       }
       return;
     }
@@ -377,12 +390,12 @@ export function applyEvent(s, ev) {
       // Posting a comment counts as accepting the request (status "working") unless the
       // analyst already said they're done.
       if (!a.status || (a.status.authorId === pid && a.status.state !== 'done')) {
-        if (!a.status) system(s, T, `${author} started the analysis of game ${g}.`);
+        if (!a.status) system(s, T, `${author} started the analysis of game ${g}.`, 'analysisStarted', { name: author, g });
         a.status = { state: 'working', authorId: pid, author, color, since: (a.status && a.status.since) || T, updated: T };
       } else if (a.status.authorId === pid) {
         a.status.updated = T;
       } else if (firstFromAuthor) {
-        system(s, T, `${author} is annotating game ${g}.`);
+        system(s, T, `${author} is annotating game ${g}.`, 'annotating', { name: author, g });
       }
       return;
     }
@@ -530,6 +543,7 @@ export function describeState(s, { me = null, now = null } = {}) {
   lines.push(`Game ${s.game} · ${describeTimeControl(s.room.tc)}`);
   lines.push(`White: ${playerName(s, 'w')}${s.players.w ? '' : ' (open seat)'}${mySeat === 'w' ? ' ← you' : ''}`);
   lines.push(`Black: ${playerName(s, 'b')}${s.players.b ? '' : ' (open seat)'}${mySeat === 'b' ? ' ← you' : ''}`);
+  lines.push(...languageNotes(s, mySeat));
   const clk = clockAt(s, now);
   if (clk) lines.push(`Clock: White ${formatClock(clk.w)} · Black ${formatClock(clk.b)}`);
   if (!s.started) lines.push('Status: waiting for a second player to join.');
@@ -551,6 +565,19 @@ export function describeState(s, { me = null, now = null } = {}) {
   lines.push('');
   lines.push(asciiBoard(s.chess, mySeat === 'b'));
   return lines.join('\n');
+}
+
+// "Language: John reads Spanish (es). Write chat and analysis comments for them in Spanish."
+// for every other player whose page isn't in English. Agents use this to pick a language.
+export function languageNotes(s, mySeat = null) {
+  const out = [];
+  for (const c of ['w', 'b']) {
+    const p = s.players[c];
+    if (!p || !p.lang || p.lang === 'en' || c === mySeat) continue;
+    const name = langNameEnglish(p.lang);
+    out.push(`Language: ${p.name} reads ${name} (${p.lang}). Write chat messages and analysis comments for them in ${name}.`);
+  }
+  return out;
 }
 
 export function movesText(s) {

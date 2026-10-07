@@ -2,7 +2,8 @@
 // colors, tag badges, colored arrows, click/drag to move and the promotion picker.
 
 import { Chess } from '../vendor/chess.js';
-import { el, pieceNode, PIECE_NAME } from './ui.js';
+import { el, pieceNode } from './ui.js';
+import { t, pieceName } from './i18n.js';
 import { TAGS } from './tags.js';
 
 const FILES = 'abcdefgh';
@@ -51,7 +52,7 @@ export function drawBoard(opts) {
         sel === sq && 'sel', tgt && 'target', tgt && (piece || tgt.flags.includes('e')) && 'capture',
         checkSq === sq && 'check',
         movableColor && piece && piece.color === movableColor && 'movable'].filter(Boolean).join(' ');
-      const label = piece ? `${sq}, ${piece.color === 'w' ? 'white' : 'black'} ${PIECE_NAME[piece.type]}` : sq;
+      const label = piece ? t('board.square', { sq, piece: t(`piece.${piece.color}.${piece.type}`) }) : sq;
       const node = el('button', { class: cls, type: 'button', 'data-sq': sq, 'aria-label': label, tabindex: '-1' });
       if (piece) node.append(pieceNode(piece.color, piece.type));
       if (badge && badge.sq === sq && TAGS[badge.tag]) node.append(el('span', { class: `badge tag-${badge.tag}`, 'aria-hidden': 'true', text: TAGS[badge.tag].symbol }));
@@ -151,7 +152,7 @@ export function wireBoardInput(board, hooks) {
 
 export function askPromotion(box, color, onPick) {
   box.replaceChildren(...['q', 'r', 'b', 'n'].map((p) =>
-    el('button', { type: 'button', 'aria-label': `Promote to ${PIECE_NAME[p]}`, onclick: () => { box.hidden = true; onPick(p); } }, pieceNode(color, p))));
+    el('button', { type: 'button', 'aria-label': t('board.promote', { piece: pieceName(p) }), onclick: () => { box.hidden = true; onPick(p); } }, pieceNode(color, p))));
   box.hidden = false;
   box.querySelector('button').focus();
 }
