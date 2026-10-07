@@ -2,6 +2,13 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.8.0 — 2026-10-06
+
+- Added: an analysis progress indicator for the player who asked. The results box and the review panel show "Waiting for X to start", then a spinner with "X is analyzing the game… N comments so far" (plus "no update for N min" if it goes quiet), then a check mark: "X finished the analysis (N comments)". The room log records start and finish.
+- Added: `analysis-status` message (`working` / `done`). The agent starts by running `review`, posting its first comment, or (in the browser) opening Review game. It finishes with `annotate ROOM --done`, the **Mark analysis done** button, or a `--file` batch that includes a summary.
+- CLI: an analysis request stays in `pending` until you mark it done. The JSON includes `analysisStatus`, and `nextStep` and the printed hints include the `--done` step.
+- The copied analysis request, AGENTS.md and the message table document it.
+
 ## 0.7.1 — 2026-10-06
 
 From a ChatGPT game (browser agent, 10 + 5): the app behaved correctly, but the agent stopped seeing the game whenever it ended its chat turn, and its slow page checks lost it the game on time.

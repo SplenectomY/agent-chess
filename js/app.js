@@ -552,6 +552,7 @@ function renderBoard() {
     banner.replaceChildren(
       el('strong', { text: `${res.replace('1/2-1/2', '½–½')}` }),
       el('div', { text: `${head} · ${s.result.reason}` }),
+      analysisStatusNode(analysisWaitStatus(s.game), true),
       el('div', { class: 'banner-actions' },
         analysisButton(),
         el('button', { class: 'btn on-dark', type: 'button', text: count ? `Review game (${count} comment${count === 1 ? '' : 's'})` : 'Review game', onclick: () => startReview() }),
@@ -939,6 +940,38 @@ function renderSheet() {
 }
 
 // ---------- post-game analysis ----------
+// Status of the analysis the viewer is waiting on: null, or { state: 'waiting'|'working'|'done', who, count, quietMin }.
+function analysisWaitStatus(g) {
+  const s = R.s;
+  const a = s.analysis[g];
+  const mine = seat();
+  if (!a || !mine || !a.requests.some((r) => r.color === mine)) return null;
+  const analyst = G.playerName(s, G.other(mine));
+  const count = G.noteCount(s, g);
+  const st = a.status && a.status.authorId !== R.me.id ? a.status : null;
+  if (!st) return { state: 'waiting', who: analyst, count };
+  return { state: st.state, who: st.author, count, quietMin: Math.floor((serverNow() - st.updated) / 60000) };
+}
+
+function analysisStatusNode(st, compact = false) {
+  if (!st) return null;
+  const n = `${st.count} comment${st.count === 1 ? '' : 's'}`;
+  if (st.state === 'done') {
+    return el('p', { class: 'an-status done', role: 'status' }, el('span', { class: 'an-check', 'aria-hidden': 'true', text: '✓' }),
+      `${st.who} finished the analysis${compact ? '' : ` (${n})`}.`);
+  }
+  if (st.state === 'working') {
+    return el('p', { class: 'an-status working', role: 'status' }, el('span', { class: 'throbber', 'aria-hidden': 'true' }),
+      `${st.who} is analyzing the game… ${st.count ? `${n} so far` : ''}${!compact && st.quietMin >= 5 ? ` (no update for ${st.quietMin} min)` : ''}`);
+  }
+  return el('p', { class: 'an-status waiting', role: 'status' }, el('span', { class: 'throbber idle', 'aria-hidden': 'true' }),
+    `Analysis requested. Waiting for ${st.who} to start.`);
+}
+
+async function markAnalysis(state) {
+  const ok = await publish({ type: 'analysis-status', id: R.me.id, game: R.review ? R.review.game : R.s.game, state });
+  if (ok && state === 'done') toast('Marked the analysis as done');
+}
 function myAnalysisRequest() {
   const a = R.s.analysis[R.s.game];
   return !!(a && a.requests.some((r) => r.color === seat()));
@@ -976,11 +1009,13 @@ function analysisPrompt() {
     `   node agent-chess.mjs review ${R.code}                  # every move with its position, numbered like 14w / 14b`,
     `   node agent-chess.mjs annotate ${R.code} 14b "Nf6 drops the e5 pawn." --tag mistake --better Nd7`,
     `   node agent-chess.mjs annotate ${R.code} summary "Your 2–3 sentence summary."`,
+    `   node agent-chess.mjs annotate ${R.code} --done      # tells me you're finished (I see "analyzing…" until then)`,
     '   Tags: brilliant, great, best, good, book, interesting, inaccuracy, mistake, blunder, missed-win (or leave it out for a plain comment).',
     '',
     'Over HTTP: POST one message per comment to the room relay, using your player id:',
     `   curl -s -d '{"type":"annotation","id":"YOUR-ID","game":${g},"at":"14b","tag":"mistake","text":"...","better":"Nd7"}' ${topicUrl}`,
     `   curl -s -d '{"type":"annotation","id":"YOUR-ID","game":${g},"at":"summary","text":"..."}' ${topicUrl}`,
+    `   curl -s -d '{"type":"analysis-status","id":"YOUR-ID","game":${g},"state":"done"}' ${topicUrl}   # when you're finished`,
     '',
     `Details: ${siteBase()}AGENTS.md (section "Post-game analysis").`,
   ].join('\n');
@@ -992,6 +1027,12 @@ function startReview(ply) {
   const rec = G.gameRecord(s, s.game);
   const p = ply != null ? ply : Math.min(1, rec.moves.length); // start at the first move
   R.review = { game: s.game, ply: Math.max(0, Math.min(p, rec.moves.length)) };
+  const a = s.analysis[s.game];
+  const mine = seat();
+  const invited = !!(mine && s.room && R.me && s.room.host !== R.me.id);
+  if (invited && a && a.requests.some((r) => r.color !== mine) && !(a.status && a.status.authorId === R.me.id)) {
+    markAnalysis('working'); // opening the review counts as accepting the request
+  }
   R.sel = null;
   render();
 }
@@ -1072,7 +1113,9 @@ function renderReview() {
   if (askedOfMe) {
     body.push(el('p', { class: 'rv-ask', text: `${askedOfMe.by} asked you for an analysis. Step to a key moment and add a comment below, and finish with a summary on the last move.` }));
   }
-  if (!plies.length && !a.summaries.length && !askedOfMe) {
+  const waitSt = analysisWaitStatus(R.review.game);
+  if (waitSt) body.push(analysisStatusNode(waitSt));
+  else if (!plies.length && !a.summaries.length && !askedOfMe) {
     body.push(el('p', { class: 'rv-empty', text: iAsked
       ? `Analysis requested. Comments appear here as ${mine ? G.playerName(s, G.other(mine)) : 'your opponent'} adds them.`
       : 'No analysis yet. Use "Request analysis" to ask your opponent to annotate this game.' }));
@@ -1146,6 +1189,13 @@ function annotateForm(ply, total, notes, a) {
       if (await publish({ type: 'annotation', id: myId, game: g, at: 'summary', text: sum.value.trim() })) { toast('Summary posted'); document.activeElement.blur(); renderReview(); }
     } });
     form.append(el('h3', { text: 'Game summary' }), sum, sumBtn);
+  }
+  // Tell the requester when the analysis is finished (stops their "analyzing…" indicator).
+  const myStatus = a.status && a.status.authorId === myId ? a.status.state : null;
+  if (a.requests.some((r) => r.color !== seat())) {
+    form.append(myStatus === 'done'
+      ? el('p', { class: 'an-status done' }, el('span', { class: 'an-check', 'aria-hidden': 'true', text: '✓' }), 'You marked the analysis as done. You can still edit comments.')
+      : el('button', { class: 'btn primary an-done', type: 'button', text: 'Mark analysis done', onclick: () => markAnalysis('done') }));
   }
   return form;
 }

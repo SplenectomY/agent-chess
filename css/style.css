@@ -364,6 +364,22 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 .op-credit { color: var(--muted); font-size: .8rem; margin: 10px 0; }
 .op-close { width: 100%; min-height: 38px; }
 
+/* analysis progress (requester side) */
+.an-status { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-weight: 600; font-size: .93rem; }
+.an-status.waiting { color: var(--muted); }
+.an-status.done { color: var(--better); }
+.banner .an-status { justify-content: center; margin: 8px 0 0; color: var(--paper); font-weight: 500; }
+.banner .an-status.done { color: #7fe0b4; }
+.throbber {
+  flex: 0 0 auto; width: 15px; height: 15px; border-radius: 50%;
+  border: 2.5px solid color-mix(in srgb, currentColor 25%, transparent); border-top-color: currentColor;
+  animation: an-spin .8s linear infinite;
+}
+.throbber.idle { animation-duration: 2.4s; opacity: .7; }
+.an-check { flex: 0 0 auto; display: grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; background: var(--better); color: #fff; font-size: .7rem; line-height: 1; }
+.an-done { align-self: flex-start; }
+@keyframes an-spin { to { transform: rotate(360deg); } }
+
 /* side column */
 .status-line { margin: 0 0 12px; font-weight: 650; font-size: 1.05rem; }
 .status-line .your-move { background: var(--signal); color: #1c2433; padding: 1px 6px; }

@@ -323,6 +323,27 @@ export function applyEvent(s, ev) {
       system(s, T, `${rec.players[color].name} asked for a post-game analysis of game ${g}.`);
       return;
     }
+    case 'analysis-status': {
+      // The analyst says they've started ("working") or finished ("done").
+      const g = targetGame(s, d.game);
+      const rec = g && gameRecord(s, g);
+      if (!rec || !rec.result) return;
+      const color = seatIn(rec, pid);
+      if (!color) return;
+      const state = d.state === 'done' ? 'done' : d.state === 'working' ? 'working' : null;
+      if (!state) return;
+      const a = analysisFor(s, g);
+      const author = rec.players[color].name;
+      const prev = a.status && a.status.authorId === pid ? a.status.state : null;
+      if (prev === state) return;
+      a.status = { state, authorId: pid, author, color, since: (a.status && a.status.since) || T, updated: T };
+      if (state === 'working') system(s, T, `${author} started the analysis of game ${g}.`);
+      else {
+        const n = noteCount(s, g);
+        system(s, T, `${author} finished the analysis of game ${g} (${n} comment${n === 1 ? '' : 's'}).`);
+      }
+      return;
+    }
     case 'annotation': {
       const g = targetGame(s, d.game);
       const rec = g && gameRecord(s, g);
@@ -352,7 +373,16 @@ export function applyEvent(s, ev) {
         const list = (a.notes[ply] = (a.notes[ply] || []).filter((n) => n.authorId !== pid));
         list.push({ authorId: pid, author, color, ply, tag, text, better, time: T });
       }
-      if (firstFromAuthor) system(s, T, `${author} is annotating game ${g}.`);
+      // Posting a comment counts as accepting the request (status "working") unless the
+      // analyst already said they're done.
+      if (!a.status || (a.status.authorId === pid && a.status.state !== 'done')) {
+        if (!a.status) system(s, T, `${author} started the analysis of game ${g}.`);
+        a.status = { state: 'working', authorId: pid, author, color, since: (a.status && a.status.since) || T, updated: T };
+      } else if (a.status.authorId === pid) {
+        a.status.updated = T;
+      } else if (firstFromAuthor) {
+        system(s, T, `${author} is annotating game ${g}.`);
+      }
       return;
     }
     case 'chat': {
@@ -444,7 +474,7 @@ function targetGame(s, g) {
 }
 
 export function analysisFor(s, g) {
-  if (!s.analysis[g]) s.analysis[g] = { requests: [], notes: {}, summaries: [] };
+  if (!s.analysis[g]) s.analysis[g] = { requests: [], notes: {}, summaries: [], status: null };
   return s.analysis[g];
 }
 

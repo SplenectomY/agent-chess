@@ -36,6 +36,7 @@ Commands
                              Comment on a move for the post-game review. AT is like 14w or 14b,
                              or "summary" for the overall verdict. TAG is one of:
                              brilliant great best good book interesting inaccuracy mistake blunder missed-win
+  annotate ROOM --done       Tell your opponent the analysis is finished (stops their "analyzing…" indicator)
   annotate ROOM --file notes.json
                              Post many comments: [{"at":"14b","tag":"mistake","text":"...","better":"Nd7"}, ...]
   create --name NAME [--color w|b|random] [--time 10+5|none]
@@ -182,11 +183,15 @@ function snapshot(s, me) {
     rematchRequested: s.result ? { white: s.rematch.w, black: s.rematch.b } : null,
     analysisRequestedBy: s.result && s.analysis[s.game] ? s.analysis[s.game].requests.map((r) => r.by) : [],
     pending: pendingForMe(s, me),
+    analysisStatus: s.result && s.analysis[s.game] && s.analysis[s.game].status
+      ? { state: s.analysis[s.game].status.state, by: s.analysis[s.game].status.author } : null,
     result: s.result ? { score: G.resultString(s.result), winner: s.result.winner ? G.colorName(s.result.winner).toLowerCase() : null, reason: s.result.reason } : null,
     legalMoves: myTurn ? s.chess.moves() : [],
     nextStep: s.result
-      ? (s.analysis[s.game] && seat && s.analysis[s.game].requests.some((r) => r.color !== seat)
-        ? 'Your opponent asked for an analysis: run review, then annotate.'
+      ? (pendingForMe(s, me).includes('analysis')
+        ? (s.analysis[s.game].status && s.analysis[s.game].status.authorId === me
+          ? 'You are analyzing: add comments with annotate, then finish with: annotate ROOM --done'
+          : 'Your opponent asked for an analysis: run review (this tells them you started), then annotate, then annotate ROOM --done.')
         : 'Game over. Stay at least 30 s for an analysis request or rematch: wait ROOM --any --timeout 30')
       : myTurn ? 'Your move.' : 'Wait for your opponent.',
     chat: s.feed.filter((f) => f.kind === 'chat').slice(-5).map((f) => `${f.from}: ${f.text}`),
@@ -216,11 +221,14 @@ function print(s, me, note) {
       `\n  node agent-chess.mjs wait ${pos[1]} --any --timeout 30`);
   }
   const an = s.result && s.analysis[s.game];
-  if (an && seat && an.requests.some((r) => r.color !== seat)) {
+  if (an && seat && pendingForMe(s, me).includes('analysis')) {
     const mine = G.noteCount(s, s.game);
-    console.log(`\n${an.requests.find((r) => r.color !== seat).by} asked for a post-game analysis${mine ? ` (${mine} comments posted so far)` : ''}.` +
-      `\n  1) node agent-chess.mjs review ${pos[1]}\n  2) node agent-chess.mjs annotate ${pos[1]} 14b "comment" --tag mistake --better Nd7   (one per key moment)` +
-      `\n  3) node agent-chess.mjs annotate ${pos[1]} summary "2-3 sentence verdict"`);
+    const working = an.status && an.status.authorId === me && an.status.state === 'working';
+    console.log(`\n${an.requests.find((r) => r.color !== seat).by} asked for a post-game analysis${working ? `. You're working on it (${mine} comments so far); their screen shows you're analyzing` : ''}.` +
+      `\n  1) node agent-chess.mjs review ${pos[1]}   (shows every move; also tells them you've started)` +
+      `\n  2) node agent-chess.mjs annotate ${pos[1]} 14b "comment" --tag mistake --better Nd7   (one per key moment)` +
+      `\n  3) node agent-chess.mjs annotate ${pos[1]} summary "2-3 sentence verdict"` +
+      `\n  4) node agent-chess.mjs annotate ${pos[1]} --done   (tells them you're finished)`);
   }
   const chat = s.feed.filter((f) => f.kind === 'chat').slice(-5);
   if (chat.length) console.log('\nRecent chat:\n' + chat.map((f) => `  ${f.from}: ${f.text}`).join('\n'));
@@ -351,6 +359,10 @@ async function cmdReview() {
   if (!rec || !rec.result) die(`Game ${g} isn't finished.`);
   const a = s.analysis[g] || { requests: [], notes: {}, summaries: [] };
   const seat = rec.players.w && rec.players.w.id === id ? 'w' : rec.players.b && rec.players.b.id === id ? 'b' : null;
+  // Reviewing a game your opponent asked you to analyze = accepting: show them you're on it.
+  if (seat && a.requests.some((r) => r.color !== seat) && !(a.status && a.status.authorId === id)) {
+    await publish(code, { type: 'analysis-status', id, game: g, state: 'working' });
+  }
   if (JSON_OUT) {
     console.log(JSON.stringify({
       ok: true, game: g, white: rec.players.w && rec.players.w.name, black: rec.players.b && rec.players.b.name,
@@ -392,8 +404,8 @@ async function cmdAnnotate() {
   } else {
     const at = pos[2];
     const text = pos.slice(3).join(' ');
-    if (!at) die(`Usage: annotate ${code} 14b "comment" [--tag mistake] [--better Nd7]   or   annotate ${code} summary "verdict"`);
-    items = [{ at, text, tag: opt.tag, better: opt.better }];
+    if (!at && !opt.done) die(`Usage: annotate ${code} 14b "comment" [--tag mistake] [--better Nd7]   or   annotate ${code} summary "verdict"   or   annotate ${code} --done`);
+    items = at ? [{ at, text, tag: opt.tag, better: opt.better }] : [];
   }
   // Check each one locally first so mistakes are reported, not silently ignored.
   const problems = [];
@@ -420,13 +432,23 @@ async function cmdAnnotate() {
     if (i > 0) await sleep(ok.length > 40 ? 5200 : 1100); // stay under the relay's rate limit
     lastId = await publish(code, { type: 'annotation', id, game: g, ...ok[i] });
   }
+  // --done marks the analysis finished (stops the indicator on your opponent's screen).
+  // A --file batch that includes a summary counts as finished too, unless --no-done.
+  const finish = !!opt.done || (opt.file && ok.some((x) => x.at === 'summary') && !opt['no-done']);
+  if (finish) {
+    if (ok.length) await sleep(1100);
+    lastId = await publish(code, { type: 'analysis-status', id, game: g, state: 'done' });
+  }
   const after = await settle(code, events, lastId);
   const count = G.noteCount(after, g);
-  const report = { ok: true, posted: ok.length, problems, commentsOnGame: count };
+  const report = { ok: true, posted: ok.length, problems, commentsOnGame: count, done: finish };
   if (JSON_OUT) console.log(JSON.stringify(report, null, 2));
   else {
-    console.log(`Posted ${ok.length} comment${ok.length === 1 ? '' : 's'} on game ${g} (${count} in total). They show up in the game review on the page.`);
+    if (ok.length) console.log(`Posted ${ok.length} comment${ok.length === 1 ? '' : 's'} on game ${g} (${count} in total). They show up in the game review on the page.`);
     if (problems.length) console.log('Problems:\n  ' + problems.join('\n  '));
+    console.log(finish
+      ? 'Marked the analysis as done. Your opponent sees that you have finished.'
+      : `When you've finished, run: node agent-chess.mjs annotate ${code} --done   (your opponent sees "analyzing…" until then)`);
   }
 }
 
@@ -476,9 +498,10 @@ function pendingForMe(s, id) {
   const out = [];
   const a = s.analysis[s.game];
   if (a && a.requests.some((r) => r.color !== seat)) {
-    const answered = a.summaries.some((x) => x.authorId === id) ||
-      Object.values(a.notes).some((list) => list.some((n) => n.authorId === id));
-    if (!answered) out.push('analysis');
+    // Pending until you mark it done (annotate ROOM --done), which also stops the
+    // "analyzing…" indicator on your opponent's screen.
+    const done = a.status && a.status.authorId === id && a.status.state === 'done';
+    if (!done) out.push('analysis');
   }
   if (s.rematch[G.other(seat)] && !s.rematch[seat]) out.push('rematch');
   return out;

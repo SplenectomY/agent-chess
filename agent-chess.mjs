@@ -2669,6 +2669,31 @@ function applyEvent(s, ev) {
       system(s, T, `${rec.players[color].name} asked for a post-game analysis of game ${g}.`);
       return;
     }
+    case "analysis-status": {
+      const g = targetGame(s, d.game);
+      const rec = g && gameRecord(s, g);
+      if (!rec || !rec.result)
+        return;
+      const color = seatIn(rec, pid);
+      if (!color)
+        return;
+      const state = d.state === "done" ? "done" : d.state === "working" ? "working" : null;
+      if (!state)
+        return;
+      const a = analysisFor(s, g);
+      const author = rec.players[color].name;
+      const prev = a.status && a.status.authorId === pid ? a.status.state : null;
+      if (prev === state)
+        return;
+      a.status = { state, authorId: pid, author, color, since: a.status && a.status.since || T, updated: T };
+      if (state === "working")
+        system(s, T, `${author} started the analysis of game ${g}.`);
+      else {
+        const n = noteCount(s, g);
+        system(s, T, `${author} finished the analysis of game ${g} (${n} comment${n === 1 ? "" : "s"}).`);
+      }
+      return;
+    }
     case "annotation": {
       const g = targetGame(s, d.game);
       const rec = g && gameRecord(s, g);
@@ -2703,8 +2728,15 @@ function applyEvent(s, ev) {
         const list = a.notes[ply] = (a.notes[ply] || []).filter((n) => n.authorId !== pid);
         list.push({ authorId: pid, author, color, ply, tag, text, better, time: T });
       }
-      if (firstFromAuthor)
+      if (!a.status || a.status.authorId === pid && a.status.state !== "done") {
+        if (!a.status)
+          system(s, T, `${author} started the analysis of game ${g}.`);
+        a.status = { state: "working", authorId: pid, author, color, since: a.status && a.status.since || T, updated: T };
+      } else if (a.status.authorId === pid) {
+        a.status.updated = T;
+      } else if (firstFromAuthor) {
         system(s, T, `${author} is annotating game ${g}.`);
+      }
       return;
     }
     case "chat": {
@@ -2782,7 +2814,7 @@ function targetGame(s, g) {
 }
 function analysisFor(s, g) {
   if (!s.analysis[g])
-    s.analysis[g] = { requests: [], notes: {}, summaries: [] };
+    s.analysis[g] = { requests: [], notes: {}, summaries: [], status: null };
   return s.analysis[g];
 }
 function noteCount(s, g) {
@@ -2915,7 +2947,7 @@ function parseNtfyMessage(msg) {
 }
 
 // js/version.js
-var VERSION = "0.7.1";
+var VERSION = "0.8.0";
 
 // tools/cli.mjs
 var SITE = "https://splenectomy.github.io/agent-chess/";
@@ -2944,6 +2976,7 @@ Commands
                              Comment on a move for the post-game review. AT is like 14w or 14b,
                              or "summary" for the overall verdict. TAG is one of:
                              brilliant great best good book interesting inaccuracy mistake blunder missed-win
+  annotate ROOM --done       Tell your opponent the analysis is finished (stops their "analyzing…" indicator)
   annotate ROOM --file notes.json
                              Post many comments: [{"at":"14b","tag":"mistake","text":"...","better":"Nd7"}, ...]
   create --name NAME [--color w|b|random] [--time 10+5|none]
@@ -3098,9 +3131,10 @@ function snapshot(s, me) {
     rematchRequested: s.result ? { white: s.rematch.w, black: s.rematch.b } : null,
     analysisRequestedBy: s.result && s.analysis[s.game] ? s.analysis[s.game].requests.map((r) => r.by) : [],
     pending: pendingForMe(s, me),
+    analysisStatus: s.result && s.analysis[s.game] && s.analysis[s.game].status ? { state: s.analysis[s.game].status.state, by: s.analysis[s.game].status.author } : null,
     result: s.result ? { score: resultString(s.result), winner: s.result.winner ? colorName(s.result.winner).toLowerCase() : null, reason: s.result.reason } : null,
     legalMoves: myTurn ? s.chess.moves() : [],
-    nextStep: s.result ? s.analysis[s.game] && seat && s.analysis[s.game].requests.some((r) => r.color !== seat) ? "Your opponent asked for an analysis: run review, then annotate." : "Game over. Stay at least 30 s for an analysis request or rematch: wait ROOM --any --timeout 30" : myTurn ? "Your move." : "Wait for your opponent.",
+    nextStep: s.result ? pendingForMe(s, me).includes("analysis") ? s.analysis[s.game].status && s.analysis[s.game].status.authorId === me ? "You are analyzing: add comments with annotate, then finish with: annotate ROOM --done" : "Your opponent asked for an analysis: run review (this tells them you started), then annotate, then annotate ROOM --done." : "Game over. Stay at least 30 s for an analysis request or rematch: wait ROOM --any --timeout 30" : myTurn ? "Your move." : "Wait for your opponent.",
     chat: s.feed.filter((f) => f.kind === "chat").slice(-5).map((f) => `${f.from}: ${f.text}`)
   };
 }
@@ -3135,13 +3169,15 @@ The game is over, but stay for at least 30 seconds: your opponent may ask for an
   node agent-chess.mjs wait ${pos[1]} --any --timeout 30`);
   }
   const an = s.result && s.analysis[s.game];
-  if (an && seat && an.requests.some((r) => r.color !== seat)) {
+  if (an && seat && pendingForMe(s, me).includes("analysis")) {
     const mine = noteCount(s, s.game);
+    const working = an.status && an.status.authorId === me && an.status.state === "working";
     console.log(`
-${an.requests.find((r) => r.color !== seat).by} asked for a post-game analysis${mine ? ` (${mine} comments posted so far)` : ""}.` + `
-  1) node agent-chess.mjs review ${pos[1]}
+${an.requests.find((r) => r.color !== seat).by} asked for a post-game analysis${working ? `. You're working on it (${mine} comments so far); their screen shows you're analyzing` : ""}.` + `
+  1) node agent-chess.mjs review ${pos[1]}   (shows every move; also tells them you've started)` + `
   2) node agent-chess.mjs annotate ${pos[1]} 14b "comment" --tag mistake --better Nd7   (one per key moment)` + `
-  3) node agent-chess.mjs annotate ${pos[1]} summary "2-3 sentence verdict"`);
+  3) node agent-chess.mjs annotate ${pos[1]} summary "2-3 sentence verdict"` + `
+  4) node agent-chess.mjs annotate ${pos[1]} --done   (tells them you're finished)`);
   }
   const chat = s.feed.filter((f) => f.kind === "chat").slice(-5);
   if (chat.length)
@@ -3297,6 +3333,9 @@ async function cmdReview() {
     die(`Game ${g} isn't finished.`);
   const a = s.analysis[g] || { requests: [], notes: {}, summaries: [] };
   const seat = rec.players.w && rec.players.w.id === id ? "w" : rec.players.b && rec.players.b.id === id ? "b" : null;
+  if (seat && a.requests.some((r) => r.color !== seat) && !(a.status && a.status.authorId === id)) {
+    await publish(code, { type: "analysis-status", id, game: g, state: "working" });
+  }
   if (JSON_OUT) {
     console.log(JSON.stringify({
       ok: true,
@@ -3360,9 +3399,9 @@ async function cmdAnnotate() {
   } else {
     const at = pos[2];
     const text = pos.slice(3).join(" ");
-    if (!at)
-      die(`Usage: annotate ${code} 14b "comment" [--tag mistake] [--better Nd7]   or   annotate ${code} summary "verdict"`);
-    items = [{ at, text, tag: opt.tag, better: opt.better }];
+    if (!at && !opt.done)
+      die(`Usage: annotate ${code} 14b "comment" [--tag mistake] [--better Nd7]   or   annotate ${code} summary "verdict"   or   annotate ${code} --done`);
+    items = at ? [{ at, text, tag: opt.tag, better: opt.better }] : [];
   }
   const problems = [];
   const ok = [];
@@ -3398,17 +3437,25 @@ async function cmdAnnotate() {
       await sleep(ok.length > 40 ? 5200 : 1100);
     lastId = await publish(code, { type: "annotation", id, game: g, ...ok[i] });
   }
+  const finish = !!opt.done || opt.file && ok.some((x) => x.at === "summary") && !opt["no-done"];
+  if (finish) {
+    if (ok.length)
+      await sleep(1100);
+    lastId = await publish(code, { type: "analysis-status", id, game: g, state: "done" });
+  }
   const after = await settle(code, events, lastId);
   const count = noteCount(after, g);
-  const report = { ok: true, posted: ok.length, problems, commentsOnGame: count };
+  const report = { ok: true, posted: ok.length, problems, commentsOnGame: count, done: finish };
   if (JSON_OUT)
     console.log(JSON.stringify(report, null, 2));
   else {
-    console.log(`Posted ${ok.length} comment${ok.length === 1 ? "" : "s"} on game ${g} (${count} in total). They show up in the game review on the page.`);
+    if (ok.length)
+      console.log(`Posted ${ok.length} comment${ok.length === 1 ? "" : "s"} on game ${g} (${count} in total). They show up in the game review on the page.`);
     if (problems.length)
       console.log(`Problems:
   ` + problems.join(`
   `));
+    console.log(finish ? "Marked the analysis as done. Your opponent sees that you have finished." : `When you've finished, run: node agent-chess.mjs annotate ${code} --done   (your opponent sees "analyzing…" until then)`);
   }
 }
 async function cmdChat() {
@@ -3461,8 +3508,8 @@ function pendingForMe(s, id) {
   const out = [];
   const a = s.analysis[s.game];
   if (a && a.requests.some((r) => r.color !== seat)) {
-    const answered = a.summaries.some((x) => x.authorId === id) || Object.values(a.notes).some((list) => list.some((n) => n.authorId === id));
-    if (!answered)
+    const done = a.status && a.status.authorId === id && a.status.state === "done";
+    if (!done)
       out.push("analysis");
   }
   if (s.rematch[other(seat)] && !s.rematch[seat])
