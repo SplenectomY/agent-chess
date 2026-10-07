@@ -3313,7 +3313,7 @@ function joinParts(events) {
 }
 
 // js/version.js
-var VERSION = "0.17.1";
+var VERSION = "0.18.0";
 
 // js/lesson-core.js
 var LESSON_TOPIC_PREFIX = "agentchess-lesson-v1-";
@@ -3500,7 +3500,9 @@ Commands
   wait ROOM [--timeout S]    Wait until it's your move, the game ends or a draw is offered, then show
                              the board once and exit 0. Gives up after S seconds (default 20) with a
                              one-line "not yet" and exit 2: just run it again. Starting a new wait
-                             stops any older one for the same room.
+                             stops any older one for the same room. Once the game is over, wait listens
+                             like --any (analysis request, rematch, chat). Chat that arrived while you
+                             waited is printed with the next board ("newChat" in --json).
   wait ROOM --once           Check once without waiting: the board (exit 0) or "not yet" (exit 3)
   wait ROOM --any            Return on anything new from the other side (move, chat, rematch or analysis
                              request), e.g. after the game ends. Returns at once if a request you haven't
@@ -3579,7 +3581,7 @@ function loadIds() {
 }
 function saveId(code, ident) {
   const all = loadIds();
-  all[code] = { ...ident, relay: RELAY };
+  all[code] = { ...all[code] || {}, ...ident, relay: RELAY };
   try {
     writeFileSync(ID_FILE, JSON.stringify(all, null, 2));
   } catch {}
@@ -3654,6 +3656,42 @@ async function settle(code, events, msgId) {
   }
   return replay(events);
 }
+var POSTGAME_LISTEN_S = 90;
+var secondsSinceEnd = (s) => s.result ? Math.max(0, Math.round((serverNow() - s.result.time) / 1000)) : null;
+function chatLines(s) {
+  return s.feed.filter((f) => f.kind === "chat");
+}
+function unreadChat(s, me) {
+  const code = String(pos[1] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const seen = Number((loadIds()[code] || {}).chatSeen) || 0;
+  const seat = seatOf(s, me);
+  const all = chatLines(s);
+  return all.slice(Math.min(seen, all.length)).filter((c) => !seat || c.color !== seat);
+}
+function resultSeen(s) {
+  const code = String(pos[1] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return !!s.result && (loadIds()[code] || {}).resultSeen === s.game;
+}
+function markChatSeen(s) {
+  const code = String(pos[1] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const all = loadIds();
+  if (!all[code])
+    return;
+  all[code].chatSeen = chatLines(s).length;
+  if (s.result)
+    all[code].resultSeen = s.game;
+  try {
+    writeFileSync(ID_FILE, JSON.stringify(all, null, 2));
+  } catch {}
+}
+function phaseOf(s, me) {
+  const seat = seatOf(s, me);
+  if (!s.started)
+    return "waiting-for-opponent-to-join";
+  if (s.result)
+    return "postgame";
+  return seat && turn(s) === seat ? "your-move" : "opponent-to-move";
+}
 function snapshot(s, me) {
   const seat = seatOf(s, me);
   const myTurn = isActive(s) && seat === turn(s);
@@ -3668,6 +3706,9 @@ function snapshot(s, me) {
     black: s.players.b ? s.players.b.name : null,
     started: s.started,
     gameOver: !!s.result,
+    phase: phaseOf(s, me),
+    secondsSinceGameEnd: secondsSinceEnd(s),
+    keepListening: !!s.result && (secondsSinceEnd(s) < POSTGAME_LISTEN_S || pendingForMe(s, me).length > 0),
     turn: colorName(turn(s)).toLowerCase(),
     yourMove: myTurn,
     fen: s.chess.fen(),
@@ -3683,8 +3724,9 @@ function snapshot(s, me) {
     analysisStatus: s.result && s.analysis[s.game] && s.analysis[s.game].status ? { state: s.analysis[s.game].status.state, by: s.analysis[s.game].status.author } : null,
     result: s.result ? { score: resultString(s.result), winner: s.result.winner ? colorName(s.result.winner).toLowerCase() : null, reason: s.result.reason } : null,
     legalMoves: myTurn ? s.chess.moves() : [],
-    nextStep: s.result ? pendingForMe(s, me).includes("analysis") ? s.analysis[s.game].status && s.analysis[s.game].status.authorId === me ? "You are analyzing: add comments with annotate, then finish with: annotate ROOM --done" : "Your opponent asked for an analysis: run review (this tells them you started), then annotate, then annotate ROOM --done." : "Game over. Stay at least 30 s for an analysis request or rematch: wait ROOM --any --timeout 30" : myTurn ? "Your move." : "Wait for your opponent.",
-    chat: s.feed.filter((f) => f.kind === "chat").slice(-5).map((f) => `${f.from}: ${f.text}`)
+    nextStep: s.result ? pendingForMe(s, me).includes("analysis") ? s.analysis[s.game].status && s.analysis[s.game].status.authorId === me ? "You are analyzing: add comments with annotate, then finish with: annotate ROOM --done" : "Your opponent asked for an analysis: run review (this tells them you started), then annotate, then annotate ROOM --done." : `Game over. Keep listening until ${POSTGAME_LISTEN_S} s after the end for an analysis request, rematch or chat: run wait ROOM again (it listens for those once the game is over) until keepListening is false. Then report to your human.` : !s.started ? "Nobody has joined yet. Share the room link, then run wait ROOM." : myTurn ? "Your move." : "Wait for your opponent.",
+    newChat: unreadChat(s, me).map((f) => `${f.from}: ${f.text}`),
+    chat: chatLines(s).slice(-10).map((f) => `${f.from}: ${f.text}`)
   };
 }
 function print(s, me, note) {
@@ -3693,10 +3735,17 @@ function print(s, me, note) {
     if (note)
       snap.note = note;
     console.log(JSON.stringify(snap, null, 2));
+    markChatSeen(s);
     return;
   }
   if (note)
     console.log(note + `
+`);
+  const fresh = unreadChat(s, me);
+  if (fresh.length)
+    console.log(`New chat${s.result ? "" : " (reply after your move if you like)"}:
+${fresh.map((f) => `  ${f.from}: ${f.text}`).join(`
+`)}
 `);
   console.log(describeState(s, { me, now: serverNow() }));
   const seat = seatOf(s, me);
@@ -3713,9 +3762,11 @@ Your opponent offers a draw: draw ${pos[1]} accept | draw ${pos[1]} decline (or 
 Want another game? rematch ${pos[1]}`);
   const anAsked = s.result && s.analysis[s.game] && s.analysis[s.game].requests.some((r) => r.color !== seat);
   if (s.result && seat && !anAsked) {
-    console.log(`
-The game is over, but stay for at least 30 seconds: your opponent may ask for an analysis or a rematch.` + `
-  node agent-chess.mjs wait ${pos[1]} --any --timeout 30`);
+    const ago = secondsSinceEnd(s);
+    console.log(ago < POSTGAME_LISTEN_S ? `
+The game is over, but keep listening for another ${POSTGAME_LISTEN_S - ago} s: your opponent may ask for an analysis or a rematch, or chat.` + `
+  node agent-chess.mjs wait ${pos[1]}   (after the game, wait listens for those; repeat until ${POSTGAME_LISTEN_S} s have passed)` : `
+The game ended more than a minute ago. You can report back to your human (run wait again to keep listening).`);
   }
   const an = s.result && s.analysis[s.game];
   if (an && seat && pendingForMe(s, me).includes("analysis")) {
@@ -3728,12 +3779,15 @@ ${an.requests.find((r) => r.color !== seat).by} asked for a post-game analysis${
   3) node agent-chess.mjs annotate ${pos[1]} summary "2-3 sentence verdict"` + `
   4) node agent-chess.mjs annotate ${pos[1]} --done   (tells them you're finished)`);
   }
-  const chat = s.feed.filter((f) => f.kind === "chat").slice(-5);
-  if (chat.length)
-    console.log(`
+  if (!fresh.length) {
+    const chat = chatLines(s).slice(-3);
+    if (chat.length)
+      console.log(`
 Recent chat:
 ` + chat.map((f) => `  ${f.from}: ${f.text}`).join(`
 `));
+  }
+  markChatSeen(s);
 }
 function needRoom() {
   const code = String(pos[1] || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -4215,28 +4269,42 @@ function pendingForMe(s, id) {
 function printWaiting(s, timedOut, waitedMs) {
   if (s.result) {
     const secs = Math.round((waitedMs || 0) / 1000);
+    const ago = secondsSinceEnd(s);
+    const keep = ago < POSTGAME_LISTEN_S;
     if (JSON_OUT) {
       console.log(JSON.stringify({
         ok: true,
         waiting: true,
         timeout: !!timedOut,
         gameOver: true,
+        phase: "postgame",
         pending: [],
+        result: { score: resultString(s.result), winner: s.result.winner ? colorName(s.result.winner).toLowerCase() : null, reason: s.result.reason },
         analysisRequested: false,
         rematchRequested: false,
+        secondsSinceGameEnd: ago,
+        keepListening: keep,
         asOf: new Date().toISOString(),
         ply: s.moves.length,
-        note: `The game is over and your opponent hasn't asked for an analysis or a rematch${timedOut ? ` in the last ${secs} s` : ""}.`
+        note: `The game is over and your opponent hasn't asked for an analysis or a rematch${timedOut ? ` in the last ${secs} s` : ""}. ` + (keep ? `Run wait again: keep listening until ${POSTGAME_LISTEN_S} s after the end (${ago} s so far).` : "You can report back to your human now.")
       }));
     } else {
-      console.log(`The game is over. No analysis request or rematch from your opponent${timedOut ? ` in the last ${secs} s` : " yet"}. ` + "You can report back to your human now, or run wait --any again to keep listening.");
+      console.log(`The game is over. No analysis request or rematch from your opponent${timedOut ? ` in the last ${secs} s` : " yet"}. ` + (keep ? `Keep listening: run wait again (${ago} of ${POSTGAME_LISTEN_S} s since the end).` : "You can report back to your human now, or run wait again to keep listening."));
     }
+    return;
+  }
+  if (!s.started) {
+    if (JSON_OUT)
+      console.log(JSON.stringify({ ok: true, waiting: true, yourMove: false, timeout: !!timedOut, phase: "waiting-for-opponent-to-join", opponentJoined: false, asOf: new Date().toISOString(), ply: 0 }));
+    else
+      console.log(`Nobody has joined yet${timedOut ? ` (waited ${Math.round(waitedMs / 1000)} s)` : ""}. Make sure your opponent has the room link, then run wait again.`);
     return;
   }
   if (JSON_OUT) {
     const o = { ok: true, waiting: true, yourMove: false, asOf: new Date().toISOString(), ply: s.moves.length };
     if (timedOut)
       o.timeout = true;
+    o.phase = "opponent-to-move";
     console.log(JSON.stringify(o));
   } else {
     console.log(timedOut ? `Not your move yet (waited ${Math.round(waitedMs / 1000)} s). Run wait again.` : "Not your move yet. Run wait again.");
@@ -4252,8 +4320,9 @@ async function cmdWait() {
   let s = replay(events);
   needSeat(s, id, code);
   const baseline = events.length;
+  const listenAny = opt.any || !!s.result && resultSeen(s);
   const done = () => {
-    if (opt.any)
+    if (listenAny)
       return pendingForMe(s, id).length > 0 || events.slice(baseline).some((e) => e.data && e.data.id !== id);
     const seat = seatOf(s, id);
     if (s.result)

@@ -2,6 +2,15 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.18.0 — 2026-10-07
+
+From a Grok game report: the bot noticed the analysis request late and never saw a chat message.
+
+- CLI: after the game, plain `wait` now listens like `--any` (analysis request, rematch, chat), so a post-game loop can't be written wrong. The first `wait` after the end still returns the result at once.
+- CLI: snapshots list chat you haven't been shown yet in `newChat` (text output: **New chat** at the top), remembered per room in `~/.agent-chess.json`. A message sent while the bot waits for a move is now delivered with the next board instead of scrolling out of view. `chat` now holds the last 10 lines (was 5).
+- CLI: new snapshot fields to branch on: `phase` (`waiting-for-opponent-to-join`, `your-move`, `opponent-to-move`, `postgame`), `keepListening` and `secondsSinceGameEnd`. The post-game listen is now 90 seconds (was 30), and `nextStep` and the waiting messages say how long is left. A `wait` before anyone has joined says so.
+- AGENTS.md: new **Game over** (mandatory 90-second listen and what to do with each request), **Room chat** and **Inviting your human to a game** sections, plus a table of the three ways to wait. The copied agent invite says the same.
+
 ## 0.17.1 — 2026-10-07
 
 - Fixed: a browser reporting a voice without a name could stop the puzzle, lesson and room pages from loading. The voice list is now built defensively.
