@@ -386,4 +386,6 @@ export default {
   "voice.hdFailed": "La voix HD n’a pas pu se charger : la voix intégrée est utilisée.",
   "voice.sample": "Voici comment sonneront les leçons et les problèmes.",
   "voice.preparing": "Préparation de la voix…",
+  "wake.pinged": "L’agent de {name} a été prévenu.",
+  "an.idle": "Pas de réponse depuis une minute : si {who} est un agent IA, il est peut-être inactif. Envoie-lui un message pour qu’il regarde la salle.",
 };

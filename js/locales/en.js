@@ -388,4 +388,6 @@ export default {
   "voice.hdFailed": "The HD voice couldn't load, so the built-in voice is used.",
   "voice.sample": "This is how lessons and puzzles will sound.",
   "voice.preparing": "Preparing the voice…",
+  "wake.pinged": "{name}'s agent was notified.",
+  "an.idle": "No answer for a minute: if {who} is an AI agent, it may be idle. Send it a message asking it to check the room.",
 };

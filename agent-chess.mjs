@@ -2426,6 +2426,15 @@ function describeTimeControl(tc) {
   const m = Number.isInteger(mins) ? String(mins) : mins.toFixed(1).replace(/\.0$/, "");
   return `${m} min + ${inc}`;
 }
+var WAKE_EVENTS = ["move", "game-over", "draw-offer", "analysis-request", "rematch", "chat"];
+var WAKE_DEFAULT = ["game-over", "draw-offer", "analysis-request", "rematch", "chat"];
+function cleanWake(url, on) {
+  const u = typeof url === "string" ? url.trim() : "";
+  if (!/^https:\/\/[^\s"'<>]+$/i.test(u) || u.length > 500)
+    return null;
+  const list = Array.isArray(on) ? on.map(String).filter((e) => WAKE_EVENTS.includes(e)) : WAKE_DEFAULT;
+  return { url: u, on: list.length ? [...new Set(list)] : WAKE_DEFAULT };
+}
 function cleanLang(v) {
   const b = baseLang(v);
   return b || null;
@@ -2591,7 +2600,7 @@ function applyEvent(s, ev) {
       const color = d.color === "b" ? "b" : "w";
       const tc = parseTimeControl(d.time);
       s.room = { host: pid, tc, createdAt: T };
-      s.players[color] = { id: pid, name: cleanText(d.name, NAME_MAX) || "Host", lang: cleanLang(d.lang) };
+      s.players[color] = { id: pid, name: cleanText(d.name, NAME_MAX) || "Host", lang: cleanLang(d.lang), wake: cleanWake(d.wake, d.wakeOn) };
       s.clock = tc ? { w: tc.initial, b: tc.initial } : null;
       system(s, T, `${s.players[color].name} opened the room as ${colorName(color)} (${describeTimeControl(tc)}).`, "opened", { name: s.players[color].name, color, tc });
       return;
@@ -2605,15 +2614,23 @@ function applyEvent(s, ev) {
           s.players[seat].name = name;
         if (cleanLang(d.lang))
           s.players[seat].lang = cleanLang(d.lang);
+        if (d.wake !== undefined)
+          s.players[seat].wake = cleanWake(d.wake, d.wakeOn);
         return;
       }
       const free = !s.players.w ? "w" : !s.players.b ? "b" : null;
       if (!free)
         return;
-      s.players[free] = { id: pid, name: name || `Player ${free === "w" ? 1 : 2}`, lang: cleanLang(d.lang) };
+      s.players[free] = { id: pid, name: name || `Player ${free === "w" ? 1 : 2}`, lang: cleanLang(d.lang), wake: cleanWake(d.wake, d.wakeOn) };
       s.started = true;
       s.turnStart = T;
       system(s, T, `${s.players[free].name} joined as ${colorName(free)}. White to move.`, "joined", { name: s.players[free].name, color: free });
+      return;
+    }
+    case "wake": {
+      if (!seat)
+        return;
+      s.players[seat].wake = cleanWake(d.url, d.on);
       return;
     }
     case "move": {
@@ -3313,7 +3330,7 @@ function joinParts(events) {
 }
 
 // js/version.js
-var VERSION = "0.18.0";
+var VERSION = "0.19.0";
 
 // js/lesson-core.js
 var LESSON_TOPIC_PREFIX = "agentchess-lesson-v1-";
@@ -3512,6 +3529,10 @@ Commands
   resign ROOM
   rematch ROOM               Ask for (or accept) a rematch with colors swapped
   chat ROOM "TEXT"           Post a message to the room
+  wake ROOM URL [--on EVENTS]  Register an https URL your opponent's page POSTs to when they move,
+                             end the game, offer a draw, ask for analysis or a rematch, or chat, so
+                             your host can wake you (EVENTS: ${WAKE_EVENTS.join(",")}; default all but move).
+                             "wake ROOM off" removes it. Also: --wake URL [--wake-on EVENTS] on join/create.
   review ROOM [--game N]     After a game: every move numbered 14w/14b with the position before it
   annotate ROOM AT "TEXT" [--tag TAG] [--better MOVE] [--game N]
                              Comment on a move for the post-game review. AT is like 14w or 14b,
@@ -3656,6 +3677,43 @@ async function settle(code, events, msgId) {
   }
   return replay(events);
 }
+function wakeOnList(v) {
+  if (v == null || v === true)
+    return;
+  const list = String(v).split(",").map((x) => x.trim()).filter(Boolean);
+  const bad = list.filter((x) => !WAKE_EVENTS.includes(x));
+  if (bad.length)
+    die(`Unknown wake event(s): ${bad.join(", ")}. Use: ${WAKE_EVENTS.join(", ")}`);
+  return list;
+}
+function wakeFields() {
+  if (!opt.wake)
+    return {};
+  const on = wakeOnList(opt["wake-on"]);
+  if (!cleanWake(String(opt.wake), on))
+    die("--wake needs an https:// URL.");
+  return { wake: String(opt.wake), ...on ? { wakeOn: on } : {} };
+}
+async function cmdWake() {
+  const code = needRoom();
+  const { id } = identity(code);
+  const { events, s } = await load(code);
+  needSeat(s, id, code);
+  const arg = pos[2];
+  if (!arg)
+    die(`Usage: wake ${code} https://your-hook-url [--on ${WAKE_DEFAULT.join(",")}] | wake ${code} off`);
+  const off = arg === "off";
+  const on = wakeOnList(opt.on);
+  if (!off && !cleanWake(arg, on))
+    die("The wake URL must start with https://");
+  const msgId = await publish(code, { type: "wake", id, url: off ? null : arg, ...on ? { on } : {} });
+  const after = await settle(code, events, msgId);
+  const w = after.players[seatOf(after, id)].wake;
+  if (JSON_OUT)
+    console.log(JSON.stringify({ ok: true, wake: w }));
+  else
+    console.log(w ? `Wake-up hook set. Your opponent's page will POST to it on: ${w.on.join(", ")}.` : "Wake-up hook removed.");
+}
 var POSTGAME_LISTEN_S = 90;
 var secondsSinceEnd = (s) => s.result ? Math.max(0, Math.round((serverNow() - s.result.time) / 1000)) : null;
 function chatLines(s) {
@@ -3725,6 +3783,7 @@ function snapshot(s, me) {
     result: s.result ? { score: resultString(s.result), winner: s.result.winner ? colorName(s.result.winner).toLowerCase() : null, reason: s.result.reason } : null,
     legalMoves: myTurn ? s.chess.moves() : [],
     nextStep: s.result ? pendingForMe(s, me).includes("analysis") ? s.analysis[s.game].status && s.analysis[s.game].status.authorId === me ? "You are analyzing: add comments with annotate, then finish with: annotate ROOM --done" : "Your opponent asked for an analysis: run review (this tells them you started), then annotate, then annotate ROOM --done." : `Game over. Keep listening until ${POSTGAME_LISTEN_S} s after the end for an analysis request, rematch or chat: run wait ROOM again (it listens for those once the game is over) until keepListening is false. Then report to your human.` : !s.started ? "Nobody has joined yet. Share the room link, then run wait ROOM." : myTurn ? "Your move." : "Wait for your opponent.",
+    wake: seat && s.players[seat] && s.players[seat].wake ? s.players[seat].wake : null,
     newChat: unreadChat(s, me).map((f) => `${f.from}: ${f.text}`),
     chat: chatLines(s).slice(-10).map((f) => `${f.from}: ${f.text}`)
   };
@@ -3840,7 +3899,7 @@ async function cmdCreate() {
   }
   const id = opt.id || "agent-" + randomBytes(6).toString("hex");
   saveId(code, { id, name });
-  const msgId = await publish(code, { type: "create", id, name, color, time, lang: opt.lang ? String(opt.lang) : undefined });
+  const msgId = await publish(code, { type: "create", id, name, color, time, lang: opt.lang ? String(opt.lang) : undefined, ...wakeFields() });
   const s = await settle(code, [], msgId);
   const link = `${SITE}?room=${code}${RELAY !== DEFAULT_RELAY ? `&relay=${encodeURIComponent(RELAY)}` : ""}`;
   if (JSON_OUT)
@@ -3867,7 +3926,7 @@ async function cmdJoin() {
   if (!name)
     die('Pass --name "YOUR NAME" to join.');
   saveId(code, { id, name });
-  const msgId = await publish(code, { type: "join", id, name, lang: opt.lang ? String(opt.lang) : undefined });
+  const msgId = await publish(code, { type: "join", id, name, lang: opt.lang ? String(opt.lang) : undefined, ...wakeFields() });
   const after = await settle(code, events, msgId);
   const seat = seatOf(after, id);
   if (!seat)
@@ -4412,6 +4471,7 @@ var commands = {
   chat: cmdChat,
   review: cmdReview,
   puzzle: cmdPuzzle,
+  wake: cmdWake,
   lesson: cmdLesson,
   annotate: cmdAnnotate,
   resign: () => simpleAction("resign", {}, "You resigned."),

@@ -2,6 +2,15 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.19.0 — 2026-10-07
+
+From a second Grok report: the CLI now caught the end of the game and the analysis request within seconds, but the bot itself wasn't running to hear about it. Its host only gives it a turn when the human writes, a tracked background job finishes, or a webhook fires.
+
+- Added: **wake-up hooks**. A player (an agent) can register an `https://` URL with the room (`join --wake URL`, or `wake ROOM URL --on …`). When the opponent moves, ends the game, offers a draw, asks for an analysis or a rematch, or chats, their page POSTs a small JSON note to it, so a host with webhook routines wakes the agent even when its loop isn't running. Events are selectable (default: all but moves); chat is throttled to once per 10 s. New `wake` message type; `create`/`join` accept `wake` and `wakeOn`.
+- When a request reaches an agent's hook, the human sees "Bot's agent was notified."
+- If an analysis request gets no response for a minute, the waiting line adds: "if Bot is an AI agent, it may be idle. Send it a message asking it to check the room."
+- AGENTS.md and the copied invite: run a background loop as a job the host tracks (no `nohup`/`&`/`setsid`/`disown`, no `| tee` without `pipefail`), since its exit is often what wakes the agent; new **Wake-up hook** section.
+
 ## 0.18.0 — 2026-10-07
 
 From a Grok game report: the bot noticed the analysis request late and never saw a chat message.

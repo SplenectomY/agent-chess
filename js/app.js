@@ -211,6 +211,29 @@ function serverNow() {
   return Date.now() + sorted[Math.floor(sorted.length / 2)];
 }
 
+// ---------- waking an agent that isn't running a loop ----------
+// If the opponent registered a wake-up URL (see AGENTS.md, "Wake-up hook"), tell it about the
+// things this player just did that it must react to. A fire-and-forget POST with no secrets.
+const lastWake = {};
+function wakeOpponent(event, extra = {}) {
+  const me = seat();
+  if (!me || !R.me) return false;
+  const opp = R.s.players[G.other(me)];
+  const w = opp && opp.wake;
+  if (!w || !w.on.includes(event)) return false;
+  const now = Date.now();
+  const gap = event === 'chat' ? 10000 : event === 'move' ? 0 : 3000;
+  if (now - (lastWake[event] || 0) < gap) return false;
+  lastWake[event] = now;
+  const body = JSON.stringify({
+    app: 'agent-chess', event, room: R.code, game: R.s.game, by: R.me.name, to: opp.name,
+    link: roomUrl(R.code), topic: `${RELAY}/${topicFor(R.code)}`, at: new Date().toISOString(), ...extra,
+  });
+  try { fetch(w.url, { method: 'POST', mode: 'no-cors', body, keepalive: true }).catch(() => {}); } catch { /* ignore */ }
+  return true;
+}
+const oppName = () => { const me = seat(); return me ? pName(R.s, G.other(me)) : ''; };
+
 async function publish(data) {
   try {
     await R.relay.publish({ v: G.PROTOCOL_VERSION, ...data });
@@ -376,9 +399,13 @@ function tick() {
     const key = `${s.game}:${s.moves.length}`;
     if (clk[side] < -(G.GRACE_MS + 700) && (R.flagSent.key !== key || Date.now() - R.flagSent.at > 4000)) {
       R.flagSent = { key, at: Date.now() };
-      publish({ type: 'flag', id: R.me.id, game: s.game });
+      publish({ type: 'flag', id: R.me.id, game: s.game }).then((ok) => ok && wakeOpponent('game-over', { reason: 'time' }));
     }
   }
+  // The "your agent may be idle" hint appears a minute after an analysis request.
+  const wst = s.result ? analysisWaitStatus(s.game) : null;
+  const idleKey = wst && wst.state === 'waiting' && wst.waitedS >= 60 ? `${s.game}` : null;
+  if (idleKey && R.idleShown !== idleKey) { R.idleShown = idleKey; queueRender(false); }
   const myTurn = active && seat() === side;
   const title = `${t('title.room', { code: R.code })} — ${appTitle()}`;
   document.title = myTurn ? `${t('title.yourMove')} — ${title}` : title;
@@ -551,6 +578,11 @@ async function sendMove(text) {
   renderStatus();
   click();
   const ok = await publish({ type: 'move', id: R.me.id, game: s.game, ply: s.moves.length, uci, san: mv.san, fen: mv.after });
+  if (ok) {
+    let over = false;
+    try { over = new Chess(mv.after).isGameOver(); } catch { /* ignore */ }
+    wakeOpponent(over ? 'game-over' : 'move', { move: mv.san });
+  }
   $('move-note').textContent = ok ? t('note.played', { san: mv.san }) : '';
   if (!ok) {
     R.pending = null;
@@ -699,7 +731,7 @@ function renderStatus() {
     offer.hidden = false;
     offer.replaceChildren(
       el('p', { text: t('draw.offers', { name: pName(s, s.drawOffer) }) }),
-      el('button', { class: 'btn primary', type: 'button', text: t('draw.accept'), onclick: () => publish({ type: 'accept-draw', id: R.me.id, game: s.game }) }),
+      el('button', { class: 'btn primary', type: 'button', text: t('draw.accept'), onclick: () => publish({ type: 'accept-draw', id: R.me.id, game: s.game }).then((ok) => ok && wakeOpponent('game-over', { reason: 'draw' })) }),
       el('button', { class: 'btn', type: 'button', text: t('draw.decline'), onclick: () => publish({ type: 'decline-draw', id: R.me.id, game: s.game }) }),
     );
   } else offer.hidden = true;
@@ -709,7 +741,7 @@ function renderStatus() {
   if (me && active) {
     const offered = s.drawOffer === me;
     btns.push(el('button', { class: 'btn', type: 'button', disabled: offered, text: offered ? t('act.drawOffered') : t('act.offerDraw'),
-      onclick: () => publish({ type: 'offer-draw', id: R.me.id, game: s.game }) }));
+      onclick: () => publish({ type: 'offer-draw', id: R.me.id, game: s.game }).then((ok) => ok && wakeOpponent('draw-offer')) }));
     btns.push(el('button', { class: 'btn danger', type: 'button', text: R.resignArmed ? t('act.confirmResign') : t('act.resign'),
       onclick: () => {
         if (!R.resignArmed) {
@@ -718,7 +750,7 @@ function renderStatus() {
           setTimeout(() => { R.resignArmed = false; renderStatus(); }, 4000);
         } else {
           R.resignArmed = false;
-          publish({ type: 'resign', id: R.me.id, game: s.game });
+          publish({ type: 'resign', id: R.me.id, game: s.game }).then((ok) => ok && wakeOpponent('game-over', { reason: 'resigned' }));
         }
       } }));
     if (s.clock) {
@@ -731,7 +763,7 @@ function renderStatus() {
     const theyAsked = s.rematch[G.other(me)];
     btns.push(el('button', { class: 'btn primary', type: 'button', disabled: asked,
       text: asked ? t('act.rematchRequested') : theyAsked ? t('act.acceptRematch') : t('act.rematch'),
-      onclick: () => publish({ type: 'rematch', id: R.me.id, game: s.game }) }));
+      onclick: () => publish({ type: 'rematch', id: R.me.id, game: s.game }).then((ok) => { if (ok && wakeOpponent('rematch')) toast(t('wake.pinged', { name: oppName() })); }) }));
     btns.push(analysisButton('btn'));
     btns.push(el('a', { class: 'btn', href: './', text: t('act.newRoom') }));
   }
@@ -818,6 +850,7 @@ function inviteText(s) {
     '',
     'When the game ends, don\'t leave yet: keep listening for 90 seconds before you report back (CLI: run node agent-chess.mjs wait ROOM again until "keepListening" is false; after the game, wait listens for analysis requests, rematches and chat). I may ask for a short analysis (comments on key moves that show up next to them on my screen) or a rematch. The details are in the rules link below ("Game over").',
     'I may also chat during the game. Each wait/state snapshot lists unseen messages in "newChat": move first, then reply if you like.',
+    'If your host only wakes you on a webhook, add --wake https://YOUR-HOOK to join: my page will call it when I move, chat, end the game or ask for an analysis (see "Wake-up hook" in the rules). If you run your loop in the background, keep it a job your host tracks (no nohup or &), so its exit wakes you.',
     `Full rules and message formats: ${siteBase()}AGENTS.md`,
     'Feel free to chat in the room too: {"type":"chat","id":"...","text":"good luck"}',
     ...languageLine(),
@@ -898,7 +931,10 @@ function analysisWaitStatus(g) {
   const analyst = pName(s, G.other(mine));
   const count = G.noteCount(s, g);
   const st = a.status && a.status.authorId !== R.me.id ? a.status : null;
-  if (!st) return { state: 'waiting', who: analyst, count };
+  if (!st) {
+    const mine2 = a.requests.find((r) => r.color === mine);
+    return { state: 'waiting', who: analyst, count, waitedS: mine2 ? Math.floor((serverNow() - mine2.time) / 1000) : 0 };
+  }
   return { state: st.state, who: st.author, count, quietMin: Math.floor((serverNow() - st.updated) / 60000) };
 }
 
@@ -915,7 +951,7 @@ function analysisStatusNode(st, compact = false) {
     return el('p', { class: 'an-status working', role: 'status' }, el('span', { class: 'throbber', 'aria-hidden': 'true' }), parts.join(' '));
   }
   return el('p', { class: 'an-status waiting', role: 'status' }, el('span', { class: 'throbber idle', 'aria-hidden': 'true' }),
-    t('an.waiting', { who: st.who }));
+    st.waitedS >= 60 ? `${t('an.waiting', { who: st.who })} ${t('an.idle', { who: st.who })}` : t('an.waiting', { who: st.who }));
 }
 
 async function markAnalysis(state) {
@@ -941,7 +977,8 @@ async function requestAnalysis() {
   const s = R.s;
   const ok = await publish({ type: 'analysis-request', id: R.me.id, game: s.game });
   if (!ok) return;
-  await copy(analysisPrompt(), t('an.requested'));
+  const woke = wakeOpponent('analysis-request');
+  await copy(analysisPrompt(), woke ? `${t('wake.pinged', { name: oppName() })} ${t('an.requested')}` : t('an.requested'));
   startReview();
 }
 
@@ -1344,7 +1381,10 @@ function wireRoomControls() {
     const text = input.value.trim();
     if (!text) return;
     const id = (R.me && R.me.id) || (R.me = { id: 'p-' + randomString(12, 'abcdefghijklmnopqrstuvwxyz0123456789'), name: store.get('agentchess:name') || 'Spectator' }).id;
-    if (await publish({ type: 'chat', id, name: R.me.name || store.get('agentchess:name') || 'Spectator', text })) input.value = '';
+    if (await publish({ type: 'chat', id, name: R.me.name || store.get('agentchess:name') || 'Spectator', text })) {
+      input.value = '';
+      wakeOpponent('chat', { text: text.slice(0, 200) });
+    }
   });
   $('copy-pgn').addEventListener('click', () => copy(G.toPgn(R.s), t('moves.pgnCopied')));
   $('opening-chip').addEventListener('click', () => (R.opening ? (R.opening = null, renderOpening()) : openOpening()));

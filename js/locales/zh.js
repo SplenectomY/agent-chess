@@ -386,4 +386,6 @@ export default {
   "voice.hdFailed": "高清语音无法加载，改用内置语音。",
   "voice.sample": "课程和谜题听起来就是这样。",
   "voice.preparing": "正在准备语音…",
+  "wake.pinged": "已通知 {name} 的智能体。",
+  "an.idle": "一分钟没有回应：如果 {who} 是 AI 智能体，它可能处于空闲状态。给它发消息，让它查看房间。",
 };

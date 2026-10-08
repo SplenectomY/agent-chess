@@ -43,6 +43,10 @@ Commands
   resign ROOM
   rematch ROOM               Ask for (or accept) a rematch with colors swapped
   chat ROOM "TEXT"           Post a message to the room
+  wake ROOM URL [--on EVENTS]  Register an https URL your opponent's page POSTs to when they move,
+                             end the game, offer a draw, ask for analysis or a rematch, or chat, so
+                             your host can wake you (EVENTS: ${G.WAKE_EVENTS.join(',')}; default all but move).
+                             "wake ROOM off" removes it. Also: --wake URL [--wake-on EVENTS] on join/create.
   review ROOM [--game N]     After a game: every move numbered 14w/14b with the position before it
   annotate ROOM AT "TEXT" [--tag TAG] [--better MOVE] [--game N]
                              Comment on a move for the post-game review. AT is like 14w or 14b,
@@ -178,6 +182,39 @@ async function settle(code, events, msgId) {
   return G.replay(events);
 }
 
+// --wake URL [--wake-on a,b]: the opponent's page POSTs to URL when they do something you must
+// react to, so an agent that isn't running a wait loop gets woken (see AGENTS.md).
+function wakeOnList(v) {
+  if (v == null || v === true) return undefined;
+  const list = String(v).split(',').map((x) => x.trim()).filter(Boolean);
+  const bad = list.filter((x) => !G.WAKE_EVENTS.includes(x));
+  if (bad.length) die(`Unknown wake event(s): ${bad.join(', ')}. Use: ${G.WAKE_EVENTS.join(', ')}`);
+  return list;
+}
+function wakeFields() {
+  if (!opt.wake) return {};
+  const on = wakeOnList(opt['wake-on']);
+  if (!G.cleanWake(String(opt.wake), on)) die('--wake needs an https:// URL.');
+  return { wake: String(opt.wake), ...(on ? { wakeOn: on } : {}) };
+}
+
+async function cmdWake() {
+  const code = needRoom();
+  const { id } = identity(code);
+  const { events, s } = await load(code);
+  needSeat(s, id, code);
+  const arg = pos[2];
+  if (!arg) die(`Usage: wake ${code} https://your-hook-url [--on ${G.WAKE_DEFAULT.join(',')}] | wake ${code} off`);
+  const off = arg === 'off';
+  const on = wakeOnList(opt.on);
+  if (!off && !G.cleanWake(arg, on)) die('The wake URL must start with https://');
+  const msgId = await publish(code, { type: 'wake', id, url: off ? null : arg, ...(on ? { on } : {}) });
+  const after = await settle(code, events, msgId);
+  const w = after.players[G.seatOf(after, id)].wake;
+  if (JSON_OUT) console.log(JSON.stringify({ ok: true, wake: w }));
+  else console.log(w ? `Wake-up hook set. Your opponent's page will POST to it on: ${w.on.join(', ')}.` : 'Wake-up hook removed.');
+}
+
 // ---------- output ----------
 // How long to keep listening after a game: people often take a minute before they press
 // "Request analysis" or "Rematch".
@@ -256,6 +293,7 @@ function snapshot(s, me) {
           : 'Your opponent asked for an analysis: run review (this tells them you started), then annotate, then annotate ROOM --done.')
         : `Game over. Keep listening until ${POSTGAME_LISTEN_S} s after the end for an analysis request, rematch or chat: run wait ROOM again (it listens for those once the game is over) until keepListening is false. Then report to your human.`)
       : !s.started ? 'Nobody has joined yet. Share the room link, then run wait ROOM.' : myTurn ? 'Your move.' : 'Wait for your opponent.',
+    wake: seat && s.players[seat] && s.players[seat].wake ? s.players[seat].wake : null,
     newChat: unreadChat(s, me).map((f) => `${f.from}: ${f.text}`),
     chat: chatLines(s).slice(-10).map((f) => `${f.from}: ${f.text}`),
   };
@@ -349,7 +387,7 @@ async function cmdCreate() {
   }
   const id = opt.id || 'agent-' + randomBytes(6).toString('hex');
   saveId(code, { id, name });
-  const msgId = await publish(code, { type: 'create', id, name, color, time, lang: opt.lang ? String(opt.lang) : undefined });
+  const msgId = await publish(code, { type: 'create', id, name, color, time, lang: opt.lang ? String(opt.lang) : undefined, ...wakeFields() });
   const s = await settle(code, [], msgId);
   const link = `${SITE}?room=${code}${RELAY !== DEFAULT_RELAY ? `&relay=${encodeURIComponent(RELAY)}` : ''}`;
   if (JSON_OUT) console.log(JSON.stringify({ ok: true, room: code, link, you: color === 'w' ? 'white' : 'black', id }, null, 2));
@@ -373,7 +411,7 @@ async function cmdJoin() {
   if (s.players.w && s.players.b) die(`Room ${code} is full: ${s.players.w.name} vs ${s.players.b.name}. You can still watch with: state ${code}`);
   if (!name) die('Pass --name "YOUR NAME" to join.');
   saveId(code, { id, name });
-  const msgId = await publish(code, { type: 'join', id, name, lang: opt.lang ? String(opt.lang) : undefined });
+  const msgId = await publish(code, { type: 'join', id, name, lang: opt.lang ? String(opt.lang) : undefined, ...wakeFields() });
   const after = await settle(code, events, msgId);
   const seat = G.seatOf(after, id);
   if (!seat) die('The join was not accepted (someone else may have taken the seat first).');
@@ -828,6 +866,7 @@ const commands = {
   chat: cmdChat,
   review: cmdReview,
   puzzle: cmdPuzzle,
+  wake: cmdWake,
   lesson: cmdLesson,
   annotate: cmdAnnotate,
   resign: () => simpleAction('resign', {}, 'You resigned.'),

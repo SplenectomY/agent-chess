@@ -44,6 +44,19 @@ export function describeTimeControl(tc) {
   return `${m} min + ${inc}`;
 }
 
+// ---------- agent wake-up hooks ----------
+// A player (usually an agent) can give an https URL to be called when its opponent does
+// something it must react to. The opponent's page sends a small POST (no secrets in it), so an
+// agent that isn't running a wait loop gets woken by its host (for example a webhook routine).
+export const WAKE_EVENTS = ['move', 'game-over', 'draw-offer', 'analysis-request', 'rematch', 'chat'];
+export const WAKE_DEFAULT = ['game-over', 'draw-offer', 'analysis-request', 'rematch', 'chat'];
+export function cleanWake(url, on) {
+  const u = typeof url === 'string' ? url.trim() : '';
+  if (!/^https:\/\/[^\s"'<>]+$/i.test(u) || u.length > 500) return null;
+  const list = Array.isArray(on) ? on.map(String).filter((e) => WAKE_EVENTS.includes(e)) : WAKE_DEFAULT;
+  return { url: u, on: list.length ? [...new Set(list)] : WAKE_DEFAULT };
+}
+
 // A language code like "es" or "pt-BR" -> "es" / "pt"; anything else -> null.
 function cleanLang(v) {
   const b = baseLang(v);
@@ -220,7 +233,7 @@ export function applyEvent(s, ev) {
       const color = d.color === 'b' ? 'b' : 'w';
       const tc = parseTimeControl(d.time);
       s.room = { host: pid, tc, createdAt: T };
-      s.players[color] = { id: pid, name: cleanText(d.name, NAME_MAX) || 'Host', lang: cleanLang(d.lang) };
+      s.players[color] = { id: pid, name: cleanText(d.name, NAME_MAX) || 'Host', lang: cleanLang(d.lang), wake: cleanWake(d.wake, d.wakeOn) };
       s.clock = tc ? { w: tc.initial, b: tc.initial } : null;
       system(s, T, `${s.players[color].name} opened the room as ${colorName(color)} (${describeTimeControl(tc)}).`, 'opened', { name: s.players[color].name, color, tc });
       return;
@@ -231,14 +244,21 @@ export function applyEvent(s, ev) {
       if (seat) {
         if (name && name !== s.players[seat].name) s.players[seat].name = name;
         if (cleanLang(d.lang)) s.players[seat].lang = cleanLang(d.lang);
+        if (d.wake !== undefined) s.players[seat].wake = cleanWake(d.wake, d.wakeOn);
         return;
       }
       const free = !s.players.w ? 'w' : !s.players.b ? 'b' : null;
       if (!free) return; // room full: watching needs no event
-      s.players[free] = { id: pid, name: name || `Player ${free === 'w' ? 1 : 2}`, lang: cleanLang(d.lang) };
+      s.players[free] = { id: pid, name: name || `Player ${free === 'w' ? 1 : 2}`, lang: cleanLang(d.lang), wake: cleanWake(d.wake, d.wakeOn) };
       s.started = true;
       s.turnStart = T; // White's clock starts once both seats are filled
       system(s, T, `${s.players[free].name} joined as ${colorName(free)}. White to move.`, 'joined', { name: s.players[free].name, color: free });
+      return;
+    }
+    case 'wake': {
+      // Set (or clear, with no url) your wake-up hook. Seated players only.
+      if (!seat) return;
+      s.players[seat].wake = cleanWake(d.url, d.on);
       return;
     }
     case 'move': {

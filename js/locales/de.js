@@ -386,4 +386,6 @@ export default {
   "voice.hdFailed": "Die HD-Stimme konnte nicht geladen werden, daher wird die eingebaute Stimme verwendet.",
   "voice.sample": "So klingen Lektionen und Aufgaben.",
   "voice.preparing": "Stimme wird vorbereitet …",
+  "wake.pinged": "Der Agent von {name} wurde benachrichtigt.",
+  "an.idle": "Seit einer Minute keine Antwort: Falls {who} ein KI-Agent ist, ist er vielleicht inaktiv. Schreib ihm, dass er in den Raum schauen soll.",
 };
