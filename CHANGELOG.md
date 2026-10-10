@@ -2,6 +2,11 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.19.1 — 2026-10-10
+
+- Fixed: the promotion picker was hard to read in dark mode (black pieces on a dark tile). The choices now sit on light tiles over a darker backdrop in every theme and board style, with a gold highlight on the focused or hovered choice.
+- Fixed: black captured pieces next to the player names were nearly invisible in dark mode. They now get a light outline there.
+
 ## 0.19.0 — 2026-10-07
 
 From a second Grok report: the CLI now caught the end of the game and the analysis request within seconds, but the bot itself wasn't running to hear about it. Its host only gives it a turn when the human writes, a tracked background job finishes, or a webhook fires.

@@ -14,12 +14,14 @@
   --better: #1a9d6c;
   --piece-white: #fbfbf8;
   --piece-black: #1a1f2a;
+  --cap-b-rim: none; /* light outline for black captured pieces on dark backgrounds */
   --font: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --pieces: 'Noto Sans Symbols 2', 'Segoe UI Symbol', 'Apple Symbols', 'DejaVu Sans', serif;
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    --cap-b-rim: drop-shadow(0 0 1.2px #dfe7f0) drop-shadow(0 0 1.2px #dfe7f0) drop-shadow(0 0 .6px #dfe7f0);
     --paper: #141922;
     --surface: #1c2330;
     --ink: #e4e9f0;
@@ -34,6 +36,7 @@
   }
 }
 :root[data-theme="dark"] {
+  --cap-b-rim: drop-shadow(0 0 1.2px #dfe7f0) drop-shadow(0 0 1.2px #dfe7f0) drop-shadow(0 0 .6px #dfe7f0);
   --paper: #141922; --surface: #1c2330; --ink: #e4e9f0; --muted: #97a3b4; --line: #2e3849;
   --sq-light: #a7b4c3; --sq-dark: #55687f; --clock-face: #0c1017; --clock-text: #e4e9f0; --focus: #7fb0ff;
   color-scheme: dark;
@@ -232,6 +235,7 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
   font-family: var(--pieces); line-height: 1; font-size: clamp(16px, 2.2vw, 22px);
   width: 1em; height: 1em; display: inline-grid; place-items: center;
 }
+.cap-piece.b { filter: var(--cap-b-rim); }
 .cap-lead { font-weight: 750; font-variant-numeric: tabular-nums; color: var(--muted); margin-left: 2px; font-size: .95rem; }
 
 /* board */
@@ -282,11 +286,18 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 .piece.cap-ghost { position: absolute; z-index: 0; }
 
 .promo {
-  position: absolute; inset: 0; background: color-mix(in srgb, var(--paper) 70%, transparent);
-  display: flex; align-items: center; justify-content: center; gap: 8px; z-index: 20;
+  position: absolute; inset: 0; background: rgba(10, 14, 20, .78);
+  display: flex; align-items: center; justify-content: center; gap: 3%; z-index: 20;
 }
-.promo button { width: 18%; aspect-ratio: 1; background: var(--surface); border: 2px solid var(--ink); cursor: pointer; container-type: size; display: grid; place-items: center; }
-.promo button:hover { background: var(--signal); }
+/* The choices sit on a light tile in every theme and board style, so both black and white
+   pieces stand out (black pieces vanished on the dark-mode surface). */
+.promo button {
+  width: 20%; aspect-ratio: 1; background: #eef1f5; border: 3px solid #fff; border-radius: 6px; cursor: pointer;
+  container-type: size; display: grid; place-items: center; box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
+  transition: transform .08s, background .08s;
+}
+.promo button:hover, .promo button:focus-visible { background: var(--signal); border-color: var(--signal); transform: scale(1.06); outline: none; }
+.promo .piece { filter: none; }
 .banner {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 15;
   background: var(--ink); color: var(--paper); padding: 16px 24px; text-align: center; min-width: 60%;
