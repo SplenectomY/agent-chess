@@ -232,11 +232,12 @@ export function renderFeedback(box, feedback, emptyText) {
 
 // The Continue button, shown right under the explanation while the reply arrows are up
 // (the caller puts it above the move box). Empty when there's nothing to continue.
-export function continueButton(S, { onRetry } = {}) {
+export function continueButton(S) {
   // After a wrong move: Retry sits in the same spot, right under the explanation, with a
-  // quieter (not gold) pulse.
+  // quieter (not gold) pulse. It never moves focus into the move box: on phones that would
+  // pop the keyboard up over the board.
   if (S.wrongChess) {
-    return [el('button', { class: 'btn retry wide', type: 'button', id: 'pz-retry', onclick: () => { S.retry(); if (onRetry) onRetry(); } },
+    return [el('button', { class: 'btn retry wide', type: 'button', id: 'pz-retry', onclick: () => S.retry() },
       el('span', { 'aria-hidden': 'true', text: '↺' }), t('sv.retry'))];
   }
   if (!S.paused) return [];
@@ -245,7 +246,7 @@ export function continueButton(S, { onRetry } = {}) {
 }
 
 // Retry / Hint buttons for an unsolved solver.
-export function solverButtons(S, { onRetry } = {}) {
+export function solverButtons(S) {
   const out = [];
   if (S.solved) return out;
   if (!S.paused && !S.wrongChess) {

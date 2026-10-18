@@ -82,10 +82,10 @@ function render() {
   renderBoard();
   $('pz-turn').replaceChildren(el('span', { class: `pb-swatch ${P.pz.solverColor}`, 'aria-hidden': 'true' }), S.statusText());
   renderFeedback($('pz-feedback'), S.feedback, t('sv.emptyFeedback'));
-  $('pz-progress').replaceChildren(...continueButton(S, { onRetry: () => { if (canMove()) $('move-input').focus(); } }));
+  $('pz-progress').replaceChildren(...continueButton(S));
   $('move-form').hidden = S.solved;
   $('move-input').disabled = !canMove();
-  const acts = solverButtons(S, { onRetry: () => { if (canMove()) $('move-input').focus(); } });
+  const acts = solverButtons(S);
   if (!S.solved) acts.push(el('button', { class: 'btn', type: 'button', text: t('common.startOver'), onclick: restart }));
   acts.push(el('button', { class: 'btn', type: 'button', text: t('common.copyLink'), onclick: copyLink }));
   $('pz-actions').replaceChildren(...acts);

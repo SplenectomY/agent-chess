@@ -2,6 +2,10 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.19.2 — 2026-10-18
+
+- Fixed: after a wrong move in a puzzle or lesson task, pressing **Retry** moved the cursor into the "Type a move" box, which on phones popped the keyboard up over the board. The move box is now never focused automatically.
+
 ## 0.19.1 — 2026-10-10
 
 - Fixed: the promotion picker was hard to read in dark mode (black pieces on a dark tile). The choices now sit on light tiles over a darker backdrop in every theme and board style, with a gold highlight on the focused or hovered choice.

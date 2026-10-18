@@ -250,10 +250,10 @@ function render() {
     $('ls-task-prompt').replaceChildren(...rich(s.task.prompt || t('ls.defaultPrompt')));
     renderFeedback($('ls-feedback'), S.feedback, t('sv.emptyFeedback'));
     if (S.solved && s.task.done) $('ls-feedback').append(el('div', { class: 'ls-done-note rich' }, ...rich(s.task.done)));
-    $('ls-progress').replaceChildren(...continueButton(S, { onRetry: () => { if (canMove()) $('move-input').focus(); } }));
+    $('ls-progress').replaceChildren(...continueButton(S));
     $('move-form').hidden = S.solved;
     $('move-input').disabled = !canMove();
-    const acts = solverButtons(S, { onRetry: () => { if (canMove()) $('move-input').focus(); } });
+    const acts = solverButtons(S);
     if (S.started && !S.busy) acts.push(el('button', { class: 'btn', type: 'button', text: S.solved ? t('ls.tryItAgain') : t('ls.resetPosition'), onclick: () => S.restart() }));
     $('ls-task-actions').replaceChildren(...acts);
   }
