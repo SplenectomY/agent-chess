@@ -2,6 +2,10 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.20.1 — 2026-10-18
+
+- Fixed: the Style menu's selects and piece preview spilled past the panel's right edge. The panel is now one grid: the label column fits the widest label (they're translated; "Scacchiera" no longer wraps), the selects fill the rest without pushing past it, and the panel is wide enough to show "Automatic (best built-in)" in full. On phones it hangs from the top bar with the same gutters on both sides, so it can't run off screen.
+
 ## 0.20.0 — 2026-10-18
 
 - Added: an **advantage bar** beside the board, like the evaluation bar on chess.com and Lichess. White's share grows with White's advantage from White's side of the board, the number sits at the leading end (+1.3, -0.5, M3), and a forced mate fills the bar. It uses Lichess's win-probability curve (+1 ≈ 59%, +3 ≈ 75%). The bar appears in game reviews once the analyst posts evaluations, carrying the latest value forward over positions without one, and follows the review as you step through moves. Its value is read aloud with the move.

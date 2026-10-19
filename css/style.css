@@ -214,12 +214,21 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 .style-lang { color: var(--muted); font-size: .8em; font-weight: 650; letter-spacing: .03em; }
 .style-menu summary::after { content: ' ▾'; color: var(--muted); }
 .style-menu[open] summary { border-color: var(--ink); }
+/* One grid for the whole panel: the label column takes the widest label (it's translated), the
+   selects fill what's left and never push past the edge (a select's natural width is its longest
+   option, so it needs min-width: 0 and a bounded track). */
 .style-pop {
   position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; background: var(--surface); border: 1.5px solid var(--ink);
-  padding: 12px; display: grid; gap: 10px; width: 230px; box-shadow: 0 6px 0 color-mix(in srgb, var(--ink) 12%, transparent);
+  padding: 12px; display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: center; gap: 10px 10px;
+  width: 320px; max-width: calc(100vw - 24px); box-sizing: border-box;
+  box-shadow: 0 6px 0 color-mix(in srgb, var(--ink) 12%, transparent);
 }
-.style-pop label { display: grid; grid-template-columns: 4rem 1fr; align-items: center; gap: 8px; font-weight: 650; font-size: .92rem; }
-.style-pop select { max-width: 14rem; min-height: 36px; border: 1.5px solid var(--line); background: var(--paper); font: inherit; color: inherit; padding: 0 6px; }
+.style-pop label { display: contents; font-weight: 650; font-size: .92rem; }
+.style-pop select {
+  width: 100%; min-width: 0; min-height: 36px; border: 1.5px solid var(--line); background: var(--paper); font: inherit; color: inherit;
+  padding: 0 6px; text-overflow: ellipsis;
+}
+.style-pop .look-voice-note, .style-pop .look-preview { grid-column: 1 / -1; }
 .look-preview { display: grid; grid-template-columns: repeat(6, 1fr); border: 1.5px solid var(--ink); }
 .lp-sq { aspect-ratio: 1; background: var(--sq-light); display: grid; place-items: center; container-type: size; }
 .lp-sq.dark { background: var(--sq-dark); }
@@ -625,6 +634,10 @@ details.panel[open] summary { margin-bottom: 10px; }
   .topbar-room { flex-wrap: nowrap; gap: 6px; }
   .room-code { font-size: .85rem; padding: 1px 6px; letter-spacing: .04em; }
   .style-menu summary { padding: 1px 7px; font-size: .85rem; white-space: nowrap; }
+  /* The panel hangs from the top bar, not the button, so it can't run off either edge. */
+  .topbar { position: relative; }
+  .style-menu { position: static; }
+  .style-pop { left: 12px; right: 12px; width: auto; max-width: none; top: calc(100% + 4px); }
 }
 @media (max-width: 380px) {
   .brand-mark { display: none; }
