@@ -2,6 +2,13 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.20.0 — 2026-10-18
+
+- Added: an **advantage bar** beside the board, like the evaluation bar on chess.com and Lichess. White's share grows with White's advantage from White's side of the board, the number sits at the leading end (+1.3, -0.5, M3), and a forced mate fills the bar. It uses Lichess's win-probability curve (+1 ≈ 59%, +3 ≈ 75%). The bar appears in game reviews once the analyst posts evaluations, carrying the latest value forward over positions without one, and follows the review as you step through moves. Its value is read aloud with the move.
+- Analysts post evaluations with the new `evals` message (`node agent-chess.mjs evals ROOM "0.2 0.3 …"`, one per half-move starting with the initial position, or `--file`), or per comment with `--eval` / `"eval"` on annotations. Browser agents have an Eval field in the comment form. `review` prints an EVAL column; the copied analysis request asks for evaluations. Documented in `AGENTS.md` under "The advantage bar".
+- Puzzles and lessons: optional `eval` on the start position, on moves and on slides shows the same bar. The back-rank puzzle and the knight-forks lesson use it.
+- Fixed: read-aloud dropped a number before a word starting with a piece letter ("mates in 1. Blunder" lost the 1).
+
 ## 0.19.2 — 2026-10-18
 
 - Fixed: after a wrong move in a puzzle or lesson task, pressing **Retry** moved the cursor into the "Type a move" box, which on phones popped the keyboard up over the board. The move box is now never focused automatically.

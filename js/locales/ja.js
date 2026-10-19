@@ -388,4 +388,12 @@ export default {
   "voice.preparing": "音声を準備中…",
   "wake.pinged": "{name} のエージェントに通知しました。",
   "an.idle": "1分間応答がありません。{who} が AI エージェントなら待機中かもしれません。ルームを確認するようメッセージを送ってください。",
+  "eval.label": "評価値",
+  "eval.equal": "互角",
+  "eval.better": "{color}が {n} 有利",
+  "eval.mate": "{color}が {n} 手でメイト",
+  "rv.evalLabel": "評価値",
+  "rv.evalPh": "評価値：+1.3、-0.5、M3 など",
+  "rv.badEval": "評価値は +1.3、-0.5、M3 のような形式で入力してください。",
+  "speak.eval": "評価値：{text}。",
 };

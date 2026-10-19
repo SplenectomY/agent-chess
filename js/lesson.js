@@ -10,6 +10,7 @@ import { drawBoard, wireBoardInput, askPromotion, parseTyped } from './board-vie
 import { Solver, renderFeedback, solverButtons, continueButton } from './solver.js';
 import { t, loc, locWith, lang, setLang, chooseLang, onLangChange, wireLangPicker, setContentLang } from './i18n.js';
 import { loadShared, permanentLink } from './share-load.js';
+import { renderEvalBar } from './eval-bar.js';
 import { Narrator, canSpeak, autoRead as autoReadOn, setAutoRead, feedbackSpeech, wireVoicePicker } from './narrator.js';
 
 const L = {
@@ -195,10 +196,28 @@ function orientation() {
   return s.orientation || L.ls.orientation;
 }
 
+// The slide's evaluation (the latest one given up to this slide; a solved task's last step
+// may carry its own), or null when the lesson gives none at all.
+function slideEval() {
+  if (!L.ls.slides.some((x) => x.eval || (x.task && x.task.line.some((st) => st.eval)))) return null;
+  const S = solverFor(L.idx);
+  const s = slide();
+  if (S && S.started) {
+    for (let i = S.step - 1; i >= 0; i--) if (s.task.line[i].eval) return s.task.line[i].eval;
+  }
+  for (let i = L.idx; i >= 0; i--) {
+    const x = L.ls.slides[i];
+    if (i < L.idx && x.task) { const last = [...x.task.line].reverse().find((st) => st.eval); if (last) return last.eval; }
+    if (x.eval) return x.eval;
+  }
+  return null;
+}
+
 function renderBoard() {
   const s = slide();
   const S = solverFor(L.idx);
   const flip = orientation() === 'b';
+  renderEvalBar($('eval-bar'), slideEval(), flip);
   const common = { board: $('board'), arrowsG: $('arrows'), flip };
   if (S && S.started && !L.finished) {
     const d = S.decor();

@@ -11,6 +11,7 @@ import { Chess } from '../vendor/chess.js';
 import { DEFAULT_RELAY, topicFor, parseNtfyLine } from '../js/relay.js';
 import { tagKey } from '../js/tags.js';
 import { langNameEnglish } from '../js/langs.js';
+import { parseEval, evalLabel, evalToJSON } from '../js/evals.js';
 import { textIn, TAGS, validatePuzzle, toBase64Url, fromBase64Url, splitParts, joinParts, PUZZLE_TOPIC_PREFIX, ID_ALPHABET } from '../js/puzzle-core.js';
 import { VERSION } from '../js/version.js';
 import { validateLesson, LESSON_TOPIC_PREFIX } from '../js/lesson-core.js';
@@ -54,7 +55,12 @@ Commands
                              brilliant great best good book interesting better-available inaccuracy mistake blunder missed-win
   annotate ROOM --done       Tell your opponent the analysis is finished (stops their "analyzing…" indicator)
   annotate ROOM --file notes.json
-                             Post many comments: [{"at":"14b","tag":"mistake","text":"...","better":"Nd7"}, ...]
+                             Post many comments: [{"at":"14b","tag":"mistake","text":"...","better":"Nd7","eval":"-1.2"}, ...]
+                             --eval / "eval" is the evaluation after that move (+1.3, -0.5, M3), shown on the
+                             advantage bar beside the board.
+  evals ROOM --file evals.json | evals ROOM "0.2 0.3 -0.1 ..."
+                             Post evaluations for the whole game in one message: a list indexed by half-move
+                             (first = the starting position, then after each move) or {"12":0.4,"13":"M2"}.
   puzzle check FILE          Validate a puzzle JSON file and print what the player will see
   puzzle publish FILE        Publish a puzzle and print two links: a short one (?id=..., kept about
                              12 hours by the relay) and a permanent one (the puzzle is in the link)
@@ -482,6 +488,7 @@ async function cmdReview() {
       commentLanguage: readerLang || 'en',
       you: seat ? G.colorName(seat).toLowerCase() : 'spectator', result: G.resultString(rec.result), reason: rec.result.reason,
       moves: rec.moves.map((m, i) => ({ at: G.plyLabel(i + 1), san: m.san, uci: m.uci, fenBefore: G.fenBefore(rec, i + 1), fenAfter: m.fen,
+        eval: a.evals && a.evals[i + 1] ? evalToJSON(a.evals[i + 1]) : undefined,
         comments: (a.notes[i + 1] || []).map((n) => ({ by: n.author, tag: n.tag, text: n.text, better: n.better && n.better.san })) })),
       summaries: a.summaries.map((x) => ({ by: x.author, text: x.text })),
       analysisRequestedBy: a.requests.map((r) => r.by),
@@ -491,14 +498,58 @@ async function cmdReview() {
   console.log(`Game ${g}: ${rec.players.w ? rec.players.w.name : 'White'} (White) vs ${rec.players.b ? rec.players.b.name : 'Black'} (Black) — ${G.resultString(rec.result)}, ${rec.result.reason}.`);
   if (seat) console.log(`You played ${G.colorName(seat)}.`);
   if (readerLang) console.log(`${reader.name} reads ${langNameEnglish(readerLang)} (${readerLang}): write your comments and summary in ${langNameEnglish(readerLang)}.`);
-  console.log('\nAT     MOVE      POSITION BEFORE THE MOVE (FEN)');
+  const evs = a.evals || {};
+  console.log(`\nAT     MOVE     ${Object.keys(evs).length ? ' EVAL  ' : ''} POSITION BEFORE THE MOVE (FEN)`);
   rec.moves.forEach((m, i) => {
     const at = G.plyLabel(i + 1);
     const notes = (a.notes[i + 1] || []).map((n) => `   [${n.author}: ${G.TAGS[n.tag].symbol} ${n.text}${n.better ? ` | better ${n.better.san}` : ''}]`).join('');
-    console.log(`${at.padEnd(6)} ${m.san.padEnd(9)} ${G.fenBefore(rec, i + 1)}${notes}`);
+    const ev = Object.keys(evs).length ? ` ${(evs[i + 1] ? evalLabel(evs[i + 1]) : '').padEnd(6)}` : '';
+    console.log(`${at.padEnd(6)} ${m.san.padEnd(9)}${ev} ${G.fenBefore(rec, i + 1)}${notes}`);
   });
+  if (!Object.keys(evs).length) console.log(`\nNo evaluations yet. Post them for the advantage bar: evals ${code} "0.2 0.3 -0.1 ..." (one per half-move, starting with the initial position) or --eval on annotate.`);
   for (const x of a.summaries) console.log(`\nSummary from ${x.author}: ${x.text}`);
   console.log(`\nComment with: node agent-chess.mjs annotate ${code} <AT> "text" --tag <tag> --better <move>`);
+}
+
+async function cmdEvals() {
+  const code = needRoom();
+  const { id } = identity(code);
+  const { events, s } = await load(code);
+  if (!s.room) die(`Room ${code} doesn't exist (or expired).`);
+  const g = pickGame(s);
+  const rec = G.gameRecord(s, g);
+  if (!rec || !rec.result) die(`Game ${g} isn't finished: evaluations are posted after the game.`);
+  const seatIn = rec.players.w && rec.players.w.id === id ? 'w' : rec.players.b && rec.players.b.id === id ? 'b' : null;
+  if (!seatIn) die(`You didn't play game ${g} in room ${code}.`);
+  let src;
+  if (opt.file) {
+    try { src = JSON.parse(readFileSync(String(opt.file), 'utf8')); } catch (e) { die(`Couldn't read ${opt.file}: ${e.message}`); }
+  } else {
+    const text = pos.slice(2).join(' ').trim();
+    if (!text) die(`Usage: evals ${code} --file evals.json   or   evals ${code} "0.2 0.3 -0.1 M3"   (one value per half-move, starting with the initial position)`);
+    src = text.split(/[\s,]+/).filter(Boolean);
+  }
+  const entries = Array.isArray(src) ? src.map((v, i) => [i, v]) : src && typeof src === 'object' ? Object.entries(src) : null;
+  if (!entries) die('Evaluations must be a list or an object keyed by half-move.');
+  const out = Array.isArray(src) ? [] : {};
+  const problems = [];
+  for (const [k, v] of entries) {
+    const ply = Number(k);
+    if (!Number.isInteger(ply) || ply < 0 || ply > rec.moves.length) { problems.push(`half-move ${k}: the game has ${rec.moves.length}`); continue; }
+    const ev = parseEval(v);
+    if (!ev) { problems.push(`half-move ${k}: "${v}" isn't like +1.3, -0.5 or M3`); if (Array.isArray(out)) out.push(null); continue; }
+    if (Array.isArray(out)) out.push(evalToJSON(ev)); else out[ply] = evalToJSON(ev);
+  }
+  const count = Array.isArray(out) ? out.filter((x) => x != null).length : Object.keys(out).length;
+  if (!count) die('No usable evaluations.' + (problems.length ? '\n  ' + problems.join('\n  ') : ''));
+  const msgId = await publish(code, { type: 'evals', id, game: g, evals: out });
+  const after = await settle(code, events, msgId);
+  const stored = Object.keys((after.analysis[g] && after.analysis[g].evals) || {}).length;
+  if (JSON_OUT) console.log(JSON.stringify({ ok: true, posted: count, problems, evaluatedPositions: stored }, null, 2));
+  else {
+    console.log(`Posted ${count} evaluation${count === 1 ? '' : 's'} for game ${g} (${stored} position${stored === 1 ? '' : 's'} evaluated). They drive the advantage bar beside the board.`);
+    if (problems.length) console.log('Problems:\n  ' + problems.join('\n  '));
+  }
 }
 
 async function cmdAnnotate() {
@@ -520,7 +571,7 @@ async function cmdAnnotate() {
     const at = pos[2];
     const text = pos.slice(3).join(' ');
     if (!at && !opt.done) die(`Usage: annotate ${code} 14b "comment" [--tag mistake] [--better Nd7]   or   annotate ${code} summary "verdict"   or   annotate ${code} --done`);
-    items = at ? [{ at, text, tag: opt.tag, better: opt.better }] : [];
+    items = at ? [{ at, text, tag: opt.tag, better: opt.better, eval: opt.eval }] : [];
   }
   // Check each one locally first so mistakes are reported, not silently ignored.
   const problems = [];
@@ -540,7 +591,13 @@ async function cmdAnnotate() {
       const c = new Chess(G.fenBefore(rec, ply));
       if (!G.previewMove({ chess: c }, String(it.better))) problems.push(`${it.at}: better move "${it.better}" isn't legal there (posted without it)`);
     }
-    ok.push({ at: G.plyLabel(ply), tag, text: it.text ? String(it.text) : '', better: it.better ? String(it.better) : undefined });
+    let ev;
+    if (it.eval != null && it.eval !== '') {
+      ev = parseEval(it.eval);
+      if (!ev) { problems.push(`${it.at}: eval "${it.eval}" isn't like +1.3, -0.5 or M3 (posted without it)`); ev = undefined; }
+    }
+    if (!it.text && !tag && !it.better && !ev) { problems.push(`${it.at}: nothing to post (no text, tag, better move or eval)`); continue; }
+    ok.push({ at: G.plyLabel(ply), tag, text: it.text ? String(it.text) : '', better: it.better ? String(it.better) : undefined, eval: ev ? evalToJSON(ev) : undefined });
   }
   let lastId = null;
   for (let i = 0; i < ok.length; i++) {
@@ -867,6 +924,7 @@ const commands = {
   review: cmdReview,
   puzzle: cmdPuzzle,
   wake: cmdWake,
+  evals: cmdEvals,
   lesson: cmdLesson,
   annotate: cmdAnnotate,
   resign: () => simpleAction('resign', {}, 'You resigned.'),

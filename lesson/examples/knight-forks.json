@@ -69,7 +69,8 @@
               "Nd6+": "It's check, but it doesn't attack the queen. You need a square that hits both e8 and a8.",
               "Nxa7": "Grabbing a pawn wastes the chance. Look for a check.",
               "*": "Look for a knight check that also attacks the queen."
-            }
+            },
+            "eval": "+9.5"
           },
           {
             "move": "Kd7",
@@ -81,11 +82,13 @@
             "hints": [
               "Collect what you forked."
             ],
-            "explain": "The queen is gone. Your knight may get trapped in the corner, but a knight for a queen is a huge trade."
+            "explain": "The queen is gone. Your knight may get trapped in the corner, but a knight for a queen is a huge trade.",
+            "eval": "+8.5"
           }
         ],
         "done": "Every king move leaves the queen undefended, so the fork wins the queen whatever Black does."
-      }
+      },
+      "eval": "+0.4"
     },
     {
       "title": "Check the landing square",
@@ -116,7 +119,7 @@
             ],
             "wrong": {
               "Nf6+": {
-                "text": "The g7 pawn guards f6 and simply takes your knight.",
+                "text": "The g7 pawn guards f6 and simply takes your knight. (The bar would drop to about -3.)",
                 "tag": "blunder",
                 "replies": [
                   "gxf6"
@@ -124,7 +127,8 @@
               },
               "Nb6": "It attacks the queen, but it isn't check, so the queen just moves away.",
               "*": "Look for a knight check that also attacks the queen on c8."
-            }
+            },
+            "eval": "+9.0"
           },
           {
             "move": "Kf8",
@@ -136,11 +140,13 @@
             "hints": [
               "Take the queen."
             ],
-            "explain": "Queen won."
+            "explain": "Queen won.",
+            "eval": "+9.0"
           }
         ],
         "done": "The fork works because **e7 is safe**: no black piece or pawn attacks it."
-      }
+      },
+      "eval": "+0.2"
     },
     {
       "title": "Your fork checklist",

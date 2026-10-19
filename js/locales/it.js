@@ -388,4 +388,12 @@ export default {
   "voice.preparing": "Preparazione della voce…",
   "wake.pinged": "L'agente di {name} è stato avvisato.",
   "an.idle": "Nessuna risposta da un minuto: se {who} è un agente IA, potrebbe essere inattivo. Mandagli un messaggio perché controlli la stanza.",
+  "eval.label": "Valutazione",
+  "eval.equal": "Parità",
+  "eval.better": "{color} è in vantaggio di {n}",
+  "eval.mate": "{color} dà matto in {n}",
+  "rv.evalLabel": "Valutazione",
+  "rv.evalPh": "Valutazione: +1.3, -0.5 o M3",
+  "rv.badEval": "La valutazione deve essere come +1.3, -0.5 o M3.",
+  "speak.eval": "Valutazione: {text}.",
 };

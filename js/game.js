@@ -11,6 +11,7 @@
 import { Chess } from '../vendor/chess.js';
 import { TAGS, tagKey } from './tags.js';
 import { baseLang, langNameEnglish } from './langs.js';
+import { parseEval } from './evals.js';
 
 export const PROTOCOL_VERSION = 1;
 // Time that may pass after a clock reaches zero before the side is flagged.
@@ -102,6 +103,19 @@ export const playerName = (s, c) => (s.players[c] ? s.players[c].name : colorNam
 // show it in the viewer's language (keys in js/locales/en.js under "log.").
 function system(s, time, text, key = null, vars = null) {
   s.feed.push({ time, kind: 'system', text, key, vars });
+}
+
+// Posting analysis counts as accepting the request (status "working") unless the analyst
+// already said they're done.
+function touchAnalysis(s, a, pid, author, color, g, T, firstFromAuthor) {
+  if (!a.status || (a.status.authorId === pid && a.status.state !== 'done')) {
+    if (!a.status) system(s, T, `${author} started the analysis of game ${g}.`, 'analysisStarted', { name: author, g });
+    a.status = { state: 'working', authorId: pid, author, color, since: (a.status && a.status.since) || T, updated: T };
+  } else if (a.status.authorId === pid) {
+    a.status.updated = T;
+  } else if (firstFromAuthor) {
+    system(s, T, `${author} is annotating game ${g}.`, 'annotating', { name: author, g });
+  }
 }
 
 // Does `color` have enough material that a checkmate is still possible?
@@ -396,6 +410,9 @@ export function applyEvent(s, ev) {
       } else {
         const ply = parseAt(d.at);
         if (!ply || ply > rec.moves.length) return;
+        // An evaluation of the position after this move feeds the advantage bar.
+        const ev = parseEval(d.eval);
+        if (ev) a.evals[ply] = ev;
         const tag = tagKey(d.tag) || 'note';
         let better = null;
         if (typeof d.better === 'string' && d.better.trim()) {
@@ -403,19 +420,38 @@ export function applyEvent(s, ev) {
           const mv = tryMove(c, d.better);
           if (mv) better = { san: mv.san, from: mv.from, to: mv.to };
         }
-        if (!text && !better && tag === 'note') return;
+        if (!text && !better && tag === 'note') {
+          if (ev) touchAnalysis(s, a, pid, author, color, g, T, firstFromAuthor);
+          return;
+        }
         const list = (a.notes[ply] = (a.notes[ply] || []).filter((n) => n.authorId !== pid));
         list.push({ authorId: pid, author, color, ply, tag, text, better, time: T });
       }
-      // Posting a comment counts as accepting the request (status "working") unless the
-      // analyst already said they're done.
-      if (!a.status || (a.status.authorId === pid && a.status.state !== 'done')) {
-        if (!a.status) system(s, T, `${author} started the analysis of game ${g}.`, 'analysisStarted', { name: author, g });
-        a.status = { state: 'working', authorId: pid, author, color, since: (a.status && a.status.since) || T, updated: T };
-      } else if (a.status.authorId === pid) {
-        a.status.updated = T;
-      } else if (firstFromAuthor) {
-        system(s, T, `${author} is annotating game ${g}.`, 'annotating', { name: author, g });
+      touchAnalysis(s, a, pid, author, color, g, T, firstFromAuthor);
+      return;
+    }
+    case 'evals': {
+      // Evaluations for a whole game at once: an array indexed by ply (0 = start position,
+      // 1 = after White's first move, ...) or an object { "12": 0.4, "13": "M2" }.
+      const g = targetGame(s, d.game);
+      const rec = g && gameRecord(s, g);
+      if (!rec || !rec.result) return;
+      const color = seatIn(rec, pid);
+      if (!color) return;
+      const a = analysisFor(s, g);
+      const src = d.evals;
+      const entries = Array.isArray(src) ? src.map((v, i) => [i, v]) : src && typeof src === 'object' ? Object.entries(src) : [];
+      let n = 0;
+      for (const [k, v] of entries) {
+        const ply = Number(k);
+        if (!Number.isInteger(ply) || ply < 0 || ply > rec.moves.length) continue;
+        const ev = parseEval(v);
+        if (ev) { a.evals[ply] = ev; n++; }
+      }
+      if (n) {
+        const author = rec.players[color].name;
+        const first = !a.summaries.some((x) => x.authorId === pid) && !Object.values(a.notes).some((list) => list.some((x) => x.authorId === pid));
+        touchAnalysis(s, a, pid, author, color, g, T, first);
       }
       return;
     }
@@ -496,9 +532,21 @@ function targetGame(s, g) {
 }
 
 export function analysisFor(s, g) {
-  if (!s.analysis[g]) s.analysis[g] = { requests: [], notes: {}, summaries: [], status: null };
+  // evals: ply -> { cp } | { mate }, the advantage bar's data (ply 0 = the starting position).
+  if (!s.analysis[g]) s.analysis[g] = { requests: [], notes: {}, summaries: [], status: null, evals: {} };
+  if (!s.analysis[g].evals) s.analysis[g].evals = {};
   return s.analysis[g];
 }
+
+// The evaluation shown for `ply`: the exact one, else the latest earlier one (an analyst may
+// only evaluate the key moments). null when the game has none at all.
+export function evalAt(s, g, ply) {
+  const a = s.analysis[g];
+  if (!a || !a.evals) return null;
+  for (let p = ply; p >= 0; p--) if (a.evals[p]) return a.evals[p];
+  return null;
+}
+export const hasEvals = (s, g) => !!(s.analysis[g] && s.analysis[g].evals && Object.keys(s.analysis[g].evals).length);
 
 export function noteCount(s, g) {
   const a = s.analysis[g];

@@ -86,6 +86,7 @@ A lesson can be a pure slideshow (no tasks at all), or mostly practice, or anyth
 | `arrows` | Arrows on the board: `"g1f3"`, `"g1-f3"`, a legal move in SAN (`"Nf3"`), or `{ "from": "g1", "to": "f3", "color": "red" }`. Colors: `green` (default), `red`, `blue`, `yellow`. |
 | `highlights` | Colored squares: `"e4"` or `{ "square": "e4", "color": "red" }`, same colors. |
 | `orientation` | Flip the board for this slide only. Usually better left alone. |
+| `eval` | Optional. The shown position's evaluation (`+1.3`, `-0.5`, `M2`, from White's point of view) for the advantage bar beside the board. The bar keeps the latest value until a later slide gives a new one; moves in a `task` can carry `eval` too. Leave it out everywhere and there's no bar. |
 | `task` | Makes the player find moves before Next unlocks. See below. |
 | `narration` | What to say when the slide is read aloud. Optional: without it the page reads the title, text and task prompt. See **Narration and audio**. |
 | `audio` | Optional link to a recording (`https://…/slide3.mp3`) that plays instead of the spoken narration, or one per language: `{ "en": "https://…", "es": "https://…" }`. |

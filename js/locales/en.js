@@ -390,4 +390,12 @@ export default {
   "voice.preparing": "Preparing the voice…",
   "wake.pinged": "{name}'s agent was notified.",
   "an.idle": "No answer for a minute: if {who} is an AI agent, it may be idle. Send it a message asking it to check the room.",
+  "eval.label": "Evaluation",
+  "eval.equal": "Equal",
+  "eval.better": "{color} is better by {n}",
+  "eval.mate": "{color} mates in {n}",
+  "rv.evalLabel": "Evaluation",
+  "rv.evalPh": "Eval: +1.3, -0.5 or M3",
+  "rv.badEval": "The evaluation should look like +1.3, -0.5 or M3.",
+  "speak.eval": "Evaluation: {text}.",
 };

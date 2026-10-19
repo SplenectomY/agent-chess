@@ -7,6 +7,8 @@ import { loadOpenings, identify, ecoVolume } from './openings.js';
 import { primerFor } from './opening-primers.js';
 import { animateMove } from './board-view.js';
 import { Narrator, voiceControls, autoRead, userActed, wireVoicePicker } from './narrator.js';
+import { renderEvalBar, evalSpeech } from './eval-bar.js';
+import { evalLabel, parseEval } from './evals.js';
 import { t, colorName as cName, timeControl, pieceName, setLang, chooseLang, onLangChange, wireLangPicker, lang } from './i18n.js';
 import { langNameEnglish } from './langs.js';
 
@@ -481,6 +483,10 @@ function renderBoard() {
   board.dataset.fen = chess.fen();
   animateMove(board, prevFen, chess.fen(), last);
   renderCaptures(chess);
+  // The advantage bar, when the analyst has posted evaluations for this game.
+  const evGame = R.review ? R.review.game : s.game;
+  const evPly = R.review ? R.review.ply : s.moves.length;
+  renderEvalBar($('eval-bar'), G.hasEvals(s, evGame) ? G.evalAt(s, evGame, evPly) : null, flip);
   // Keep one square in the tab order for keyboard users.
   const focusSq = board.querySelector('.sq.sel') || board.querySelector('.sq.movable') || board.firstChild;
   if (focusSq) focusSq.tabIndex = 0;
@@ -991,16 +997,19 @@ function analysisPrompt() {
   return [
     `Thanks for the game! Please give me a post-game analysis on Agent Chess (room ${R.code}, game ${g}). I played ${me ? G.colorName(me) : ''}${opp ? `, you played ${G.colorName(opp)}` : ''}.`,
     'Comment on the key moments: good moves, inaccuracies, mistakes, blunders and missed chances. Suggest a better move where there was one, and finish with a 2–3 sentence summary. Your comments appear on my screen next to each move, with an arrow for each better move.',
+    'Also post evaluations for the advantage bar beside my board: one number per half-move from White\'s point of view (pawns, like +0.3 or -1.2; M3 for mate in 3), starting with the starting position. If you have an engine, use its numbers; otherwise estimate from material and position, and say so in your summary.',
     '',
     'With the command-line client (same id you played with):',
     `   node agent-chess.mjs review ${R.code}                  # every move with its position, numbered like 14w / 14b`,
     `   node agent-chess.mjs annotate ${R.code} 14b "Nf6 drops the e5 pawn." --tag mistake --better Nd7`,
+    `   node agent-chess.mjs evals ${R.code} "0.2 0.3 0.1 -0.4 ..."     # one per half-move, starting position first (or --file evals.json)`,
     `   node agent-chess.mjs annotate ${R.code} summary "Your 2–3 sentence summary."`,
     `   node agent-chess.mjs annotate ${R.code} --done      # tells me you're finished (I see "analyzing…" until then)`,
     '   Tags: brilliant, great, best, good, book, interesting, better-available (good, but a better move was there: add the better move), inaccuracy, mistake, blunder, missed-win (or leave it out for a plain comment).',
     '',
     'Over HTTP: POST one message per comment to the room relay, using your player id:',
     `   curl -s -d '{"type":"annotation","id":"YOUR-ID","game":${g},"at":"14b","tag":"mistake","text":"...","better":"Nd7"}' ${topicUrl}`,
+    `   curl -s -d '{"type":"evals","id":"YOUR-ID","game":${g},"evals":[0.2,0.3,0.1,-0.4]}' ${topicUrl}   # advantage bar, one per half-move`,
     `   curl -s -d '{"type":"annotation","id":"YOUR-ID","game":${g},"at":"summary","text":"..."}' ${topicUrl}`,
     `   curl -s -d '{"type":"analysis-status","id":"YOUR-ID","game":${g},"state":"done"}' ${topicUrl}   # when you're finished`,
     '',
@@ -1067,6 +1076,7 @@ function reviewSpeech() {
     const move = rec.moves[ply - 1];
     parts.push(t('speak.moveBy', { color: move.color, move: move.san }));
     const notes = reviewNotes(ply);
+    if ((a.evals || {})[ply]) parts.push(t('speak.eval', { text: evalSpeech(a.evals[ply]) }));
     for (const n of notes) {
       if (n.tag && n.tag !== 'note') parts.push(`${tagLabel(n.tag)}.`);
       if (n.text) parts.push(n.text);
@@ -1153,7 +1163,8 @@ function renderReview() {
     el('button', { class: 'btn nav', type: 'button', 'aria-label': label, title: label, text, disabled, onclick: () => stepReview(to) });
   // Header row: the move on the left, compact ◀ ▶ » controls on the right (shown on mobile;
   // desktop keeps the full button row below).
-  const whereText = ply === 0 ? t('rv.start') : G.moveLabel(ply, move.san) + ` · ${cName(move.color)}`;
+  const exactEval = (a.evals || {})[ply];
+  const whereText = (ply === 0 ? t('rv.start') : G.moveLabel(ply, move.san) + ` · ${cName(move.color)}`) + (exactEval ? ` · ${evalLabel(exactEval)}` : '');
   const hasNext = plies.some((p) => p > ply);
   body[0] = el('div', { class: 'rv-top' },
     el('p', { class: 'rv-where', text: whereText }),
@@ -1190,10 +1201,11 @@ function annotateForm(ply, total, notes, a) {
     const text = el('textarea', { id: 'rv-text', rows: '3', maxlength: '1000', 'aria-label': t('rv.comment'), placeholder: t('rv.commentPh') });
     text.value = mineHere ? mineHere.text : '';
     const better = el('input', { id: 'rv-better', 'aria-label': t('rv.betterLabel'), placeholder: t('rv.betterPh'), value: mineHere && mineHere.better ? mineHere.better.san : '' });
+    const evalIn = el('input', { id: 'rv-eval', class: 'rv-eval', 'aria-label': t('rv.evalLabel'), placeholder: t('rv.evalPh'), value: (a.evals || {})[ply] ? evalLabel(a.evals[ply]) : '' });
     const err = el('p', { class: 'form-error', role: 'alert' });
     form.append(
       el('h3', { text: t(mineHere ? 'rv.editYour' : 'rv.your', { move: G.moveLabel(ply, reviewRecord().moves[ply - 1].san) }) }),
-      el('div', { class: 'rv-row' }, select, better), text, err,
+      el('div', { class: 'rv-row' }, select, better, evalIn), text, err,
       el('button', { class: 'btn primary', type: 'submit', text: mineHere ? t('rv.update') : t('rv.post') }));
     form.onsubmit = async (e) => {
       e.preventDefault();
@@ -1203,8 +1215,11 @@ function annotateForm(ply, total, notes, a) {
         const c = new Chess(G.fenBefore(reviewRecord(), ply));
         if (!G.previewMove({ chess: c }, b)) { err.textContent = t('rv.illegalBetter', { move: b }); return; }
       }
-      if (!text.value.trim() && !b && select.value === 'note') { err.textContent = t('rv.empty'); return; }
-      const ok = await publish({ type: 'annotation', id: myId, game: g, at: G.plyLabel(ply), tag: select.value, text: text.value.trim(), better: b || undefined });
+      const evText = evalIn.value.trim();
+      const ev = evText ? parseEval(evText) : null;
+      if (evText && !ev) { err.textContent = t('rv.badEval'); return; }
+      if (!text.value.trim() && !b && select.value === 'note' && !ev) { err.textContent = t('rv.empty'); return; }
+      const ok = await publish({ type: 'annotation', id: myId, game: g, at: G.plyLabel(ply), tag: select.value, text: text.value.trim(), better: b || undefined, eval: evText || undefined });
       if (ok) { toast(t('rv.posted')); document.activeElement.blur(); renderReview(); }
     };
   }

@@ -12,6 +12,7 @@ import { t, loc, setLang, chooseLang, onLangChange, wireLangPicker, setContentLa
 import { loadShared, permanentLink } from './share-load.js';
 import { Narrator, voiceControls, feedbackSpeech, autoRead, userActed, wireVoicePicker } from './narrator.js';
 import { locWith, lang } from './i18n.js';
+import { renderEvalBar } from './eval-bar.js';
 
 const P = {
   pz: null,
@@ -56,9 +57,20 @@ function showMissing(title, text) {
 }
 
 // ---------- board ----------
+// Evaluation after `ply` moves of the solution (the latest one given up to there), or null
+// when the puzzle gives none at all.
+function evalAfter(ply) {
+  const pz = P.pz;
+  const any = pz.eval || pz.line.some((st) => st.eval);
+  if (!any) return null;
+  for (let i = ply - 1; i >= 0; i--) if (pz.line[i].eval) return pz.line[i].eval;
+  return pz.eval || null;
+}
+
 function renderBoard() {
   const S = P.S;
   const flip = P.pz.solverColor === 'b';
+  renderEvalBar($('eval-bar'), evalAfter(P.replay != null ? P.replay : S.step), flip);
   if (P.replay != null) {
     const c = new Chess(P.pz.fen);
     for (let i = 0; i < P.replay; i++) c.move(P.pz.line[i].move);

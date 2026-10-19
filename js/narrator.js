@@ -25,8 +25,8 @@ const SAN = /\b(O-O-O|O-O|0-0-0|0-0|[KQRBN][a-h]?[1-8]?x?[a-h][1-8]|[a-h]x[a-h][
 // "Qxf7#" -> "queen takes f7, checkmate" (in `code`). Move numbers ("3." / "3...") are dropped.
 export function sayMoves(text, code) {
   return String(text || '')
-    .replace(/\b\d+\.(?:\.\.)?\s*(?=[KQRBNa-hO0])/g, '')
-    .replace(/(^|[\s(])\.\.\.(?=[KQRBNa-hO0])/g, '$1')
+    .replace(/\b\d+\.(?:\.\.)?\s*(?=(?:[KQRBN][a-h]?[1-8]?x?[a-h][1-8]|[a-h](?:x[a-h])?[1-8]|O-O|0-0)\b)/g, '')
+    .replace(/(^|[\s(])\.\.\.(?=(?:[KQRBN][a-h]?[1-8]?x?[a-h][1-8]|[a-h](?:x[a-h])?[1-8]|O-O|0-0)\b)/g, '$1')
     .replace(SAN, (m, mv, suffix) => {
       let out;
       if (/^(O-O-O|0-0-0)$/.test(mv)) out = tFor(code, 'speak.castleQ');

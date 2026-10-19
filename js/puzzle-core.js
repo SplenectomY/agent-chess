@@ -32,6 +32,7 @@
 import { Chess } from '../vendor/chess.js';
 import { TAGS, tagKey } from './tags.js';
 import { baseLang, langNameEnglish } from './langs.js';
+import { parseEval } from './evals.js';
 
 export { TAGS };
 
@@ -170,6 +171,12 @@ export function validateLine({ fen, line, opponentFirst = false, errors, warning
     };
     const out = { move: mv.san, uci: mv.from + mv.to + (mv.promotion || ''), from: mv.from, to: mv.to, solver, fenBefore, fenAfter: chess.fen() };
     if (step.explain) out.explain = str(step.explain);
+    // "eval": the position after this move, for the advantage bar (+1.3, -0.5, M3, -M2).
+    if (step.eval != null && step.eval !== '') {
+      const ev = parseEval(step.eval);
+      if (ev) out.eval = ev;
+      else warnings.push(`${where}: eval ${JSON.stringify(step.eval)} isn't an evaluation like +1.3, -0.5 or M3, so it's ignored.`);
+    }
     const tag = tagOf(step.tag, 'the');
     if (tag) out.tag = tag;
     if (step.replies != null) {
@@ -253,6 +260,11 @@ export function validatePuzzle(input) {
   const conclusion = str(p.conclusion, 4000);
   const narration = str(p.narration, 4000);
   const audio = audioField(p.audio, 'audio', warnings);
+  let startEval = null;
+  if (p.eval != null && p.eval !== '') {
+    startEval = parseEval(p.eval);
+    if (!startEval) warnings.push(`eval ${JSON.stringify(p.eval)} isn't an evaluation like +1.3, -0.5 or M3, so it's ignored.`);
+  }
   const { lang, langs } = endLangs(p.lang, title || intro, warnings);
   const puzzle = errors.length ? null : {
     v: PUZZLE_VERSION,
@@ -268,6 +280,7 @@ export function validatePuzzle(input) {
     conclusion,
     ...(narration ? { narration } : {}),
     ...(audio ? { audio } : {}),
+    ...(startEval ? { eval: startEval } : {}),
   };
   return { ok: !errors.length, errors, warnings, puzzle };
 }

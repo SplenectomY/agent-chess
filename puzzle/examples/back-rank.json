@@ -10,6 +10,7 @@
     "en": "White to move and mate in 2. Black's king is boxed in by its own pawns. Find the way in.",
     "es": "Juegan las blancas y dan mate en 2. El rey negro está encerrado por sus propios peones. Encuentra la forma de entrar."
   },
+  "eval": "M2",
   "line": [
     {
       "move": "Qc8+",
@@ -67,7 +68,8 @@
             "es": "forzada"
           }
         }
-      ]
+      ],
+      "eval": "M1"
     },
     {
       "move": "Rxc8",

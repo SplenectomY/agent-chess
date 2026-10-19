@@ -388,4 +388,12 @@ export default {
   "voice.preparing": "正在准备语音…",
   "wake.pinged": "已通知 {name} 的智能体。",
   "an.idle": "一分钟没有回应：如果 {who} 是 AI 智能体，它可能处于空闲状态。给它发消息，让它查看房间。",
+  "eval.label": "局面评估",
+  "eval.equal": "均势",
+  "eval.better": "{color}领先 {n}",
+  "eval.mate": "{color}将在 {n} 步内将死",
+  "rv.evalLabel": "局面评估",
+  "rv.evalPh": "评估：+1.3、-0.5 或 M3",
+  "rv.badEval": "评估应形如 +1.3、-0.5 或 M3。",
+  "speak.eval": "局面评估：{text}。",
 };

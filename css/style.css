@@ -239,7 +239,28 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 .cap-lead { font-weight: 750; font-variant-numeric: tabular-nums; color: var(--muted); margin-left: 2px; font-size: .95rem; }
 
 /* board */
-.board-wrap { position: relative; width: 100%; aspect-ratio: 1; }
+.board-row { display: flex; align-items: stretch; gap: 8px; }
+.board-wrap { position: relative; flex: 1 1 auto; min-width: 0; aspect-ratio: 1; }
+/* advantage bar: White's share grows from White's edge, the number sits at the leading end */
+.eval-bar {
+  position: relative; flex: 0 0 22px; width: 22px; border: 2px solid var(--ink); background: var(--piece-black);
+  overflow: hidden; border-radius: 3px; container-type: size;
+}
+.eval-bar[hidden] { display: none; }
+.eval-white { position: absolute; left: 0; right: 0; bottom: 0; height: 50%; background: var(--piece-white); transition: height .45s cubic-bezier(.25,.75,.35,1); }
+.eval-bar::after { /* the midline */
+  content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: var(--alert); opacity: .7; pointer-events: none;
+}
+.eval-val {
+  position: absolute; left: 0; right: 0; text-align: center; font-size: 9px; font-weight: 800; line-height: 1; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums; pointer-events: none; padding: 3px 0;
+}
+.eval-val.at-bottom { bottom: 0; }
+.eval-val.at-top { top: 0; }
+.eval-val.on-white { color: var(--piece-black); }
+.eval-val.on-black { color: var(--piece-white); }
+.eval-bar.mate .eval-val { font-size: 8.5px; }
+@media (max-width: 520px) { .board-row { gap: 6px; } .eval-bar { flex-basis: 18px; width: 18px; } .eval-val { font-size: 8px; } }
 .board {
   display: grid; grid-template-columns: repeat(8, 1fr); grid-template-rows: repeat(8, 1fr);
   width: 100%; height: 100%; border: 2px solid var(--ink); user-select: none; touch-action: none;
@@ -497,6 +518,7 @@ input:not([type]):focus, input[type="number"]:focus { border-color: var(--ink); 
 .rv-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .rv-row select { flex: 0 0 auto; min-height: 42px; border: 1.5px solid var(--line); background: var(--paper); padding: 0 8px; font: inherit; color: inherit; }
 .rv-row input { flex: 1 1 140px; }
+.rv-row input.rv-eval { flex: 0 1 9rem; }
 .rv-form textarea { width: 100%; border: 1.5px solid var(--line); background: var(--paper); padding: 9px 11px; font: inherit; color: inherit; resize: vertical; }
 .rv-form .btn { align-self: flex-start; }
 .draw-offer { border: 1.5px solid var(--signal); padding: 10px 12px; margin-bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

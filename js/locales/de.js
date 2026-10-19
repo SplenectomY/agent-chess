@@ -388,4 +388,12 @@ export default {
   "voice.preparing": "Stimme wird vorbereitet …",
   "wake.pinged": "Der Agent von {name} wurde benachrichtigt.",
   "an.idle": "Seit einer Minute keine Antwort: Falls {who} ein KI-Agent ist, ist er vielleicht inaktiv. Schreib ihm, dass er in den Raum schauen soll.",
+  "eval.label": "Bewertung",
+  "eval.equal": "Ausgeglichen",
+  "eval.better": "{color} steht um {n} besser",
+  "eval.mate": "{color} setzt in {n} matt",
+  "rv.evalLabel": "Bewertung",
+  "rv.evalPh": "Bewertung: +1.3, -0.5 oder M3",
+  "rv.badEval": "Die Bewertung muss aussehen wie +1.3, -0.5 oder M3.",
+  "speak.eval": "Bewertung: {text}.",
 };

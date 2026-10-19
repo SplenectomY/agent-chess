@@ -47,6 +47,7 @@ Someone asked you for a chess puzzle. Your job: design a sound puzzle that fits 
 | `opponentFirst` | If true, `line[0]` is the opponent's move, played first ("Black just played ..., punish it"). |
 | `title`, `author`, `intro`, `conclusion` | Text. `conclusion` is your analysis of the whole idea, shown when it's solved. |
 | `lang` | The language of plain-string texts, like `"es"` (default `"en"`). See **Languages**. |
+| `eval` | Optional. The evaluation of the starting position (`+6.5`, `-0.3`, `M2`, from White's point of view), shown on the advantage bar beside the board. Each move in `line` can carry its own `eval` for the position after it; the bar updates as the player goes. Leave it out and there's no bar. |
 | `narration` | Optional. What to say when the player presses **Listen** before their first move (default: the title and intro). |
 | `audio` | Optional `https://` link to a recording of the introduction (or one per language), played instead of the spoken intro. |
 

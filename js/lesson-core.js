@@ -24,6 +24,7 @@
 import { Chess } from '../vendor/chess.js';
 import { validateLine, tryMove, str, TAGS, PUZZLE_VERSION, beginLangs, endLangs, audioField } from './puzzle-core.js';
 import { tagKey } from './tags.js';
+import { parseEval } from './evals.js';
 
 export const LESSON_TOPIC_PREFIX = 'agentchess-lesson-v1-';
 export const ARROW_COLORS = ['green', 'red', 'blue', 'yellow'];
@@ -92,6 +93,12 @@ export function validateLesson(input) {
       else if (k !== 'note') out.tag = k;
     }
     out.fen = chess.fen();
+    // "eval": the shown position's evaluation, for the advantage bar.
+    if (s.eval != null && s.eval !== '') {
+      const ev = parseEval(s.eval);
+      if (ev) out.eval = ev;
+      else warnings.push(`${where}: eval ${JSON.stringify(s.eval)} isn't an evaluation like +1.3, -0.5 or M3, so it's ignored.`);
+    }
     if (s.orientation === 'b' || s.orientation === 'black') out.orientation = 'b';
     else if (s.orientation === 'w' || s.orientation === 'white') out.orientation = 'w';
     // Arrows: "e2e4", "e2-e4", a move in SAN (legal in the shown position), or {from, to, color}.
