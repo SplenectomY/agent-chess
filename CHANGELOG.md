@@ -2,6 +2,12 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.21.1 — 2026-10-20
+
+- Fixed: a token pasted into the lobby's Relay box without pressing Save was never used, so opening a room on your own relay failed with "only opens rooms with its token". Open room now uses whatever is in the Relay fields and saves it.
+- The relay's health check now verifies the token too (`/v1/health` with `Authorization` answers `"token": "ok" | "wrong" | "none"`), so Save says "accepts your token", "doesn't accept this token" or "has no token", and a wrong token is refused in the lobby with that message instead of on the room page. Deploy the Worker again to get this; older Workers still show the plain "answers" message.
+- The Worker ignores whitespace around `CREATE_TOKEN` (a piped `wrangler secret put` can leave a newline on it). The token field is plain text, so password managers leave it alone.
+
 ## 0.21.0 — 2026-10-20
 
 - Added: **your own relay**, as a fallback to ntfy.sh's rate limits (60 requests at once, then one every 5 seconds, 250 messages a day per IP address). `relay/` holds an ntfy-compatible relay for Cloudflare Workers + Durable Objects that runs on the free plan: `npx wrangler deploy`, then `npx wrangler secret put CREATE_TOKEN`. With the token set, only requests carrying it can open a room or store a puzzle or lesson there; anyone with a room link can still join and play. Deploy notes in `relay/README.md`.

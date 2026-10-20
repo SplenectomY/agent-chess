@@ -48,6 +48,9 @@ function newId() {
   return Array.from(bytes, (b) => ID_CHARS[b % ID_CHARS.length]).join('');
 }
 
+// The create token, without the newline a piped `wrangler secret put` can leave on it.
+const createToken = (env) => String(env.CREATE_TOKEN || '').trim();
+
 // Constant-time comparison, so the token can't be guessed character by character.
 function sameToken(a, b) {
   if (a.length !== b.length) return false;
@@ -66,7 +69,18 @@ export default {
         + 'To use it, open the site, choose "Open a room" and paste this address under Relay.\n',
       { headers: { 'Content-Type': 'text/plain; charset=utf-8', ...CORS } });
     }
-    if (parts[0] === 'v1' && parts[1] === 'health' && parts.length === 2) return json({ healthy: true });
+    if (parts[0] === 'v1' && parts[1] === 'health' && parts.length === 2) {
+      // With an Authorization header, also say whether that token is the one that opens rooms
+      // here ("ok", "wrong", or "none" when this relay has no token), so the site can check a
+      // pasted token before anyone tries to open a room.
+      const out = { healthy: true };
+      const auth = request.headers.get('Authorization');
+      if (auth != null) {
+        const want = createToken(env);
+        out.token = !want ? 'none' : sameToken(auth.replace(/^Bearer\s+/i, '').trim(), want) ? 'ok' : 'wrong';
+      }
+      return json(out);
+    }
     const topic = parts[0];
     if (!TOPIC.test(topic)) return fail(404, 40401, 'not an Agent Chess topic');
     if (parts.length > 2 || (parts.length === 2 && parts[1] !== 'json' && parts[1] !== 'sse')) return fail(404, 40402, 'not found');
@@ -133,10 +147,10 @@ export class Room {
     if (!this.meta) {
       // A new topic. With CREATE_TOKEN set, only someone with the token can open one; after that,
       // anyone with the link can post, the same as on ntfy.sh.
-      const want = this.env.CREATE_TOKEN;
+      const want = createToken(this.env);
       if (want) {
         const got = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '').trim();
-        if (!got || !sameToken(got, String(want))) return fail(401, 40101, 'this relay needs its token to open a room or store a puzzle (Authorization: Bearer …)');
+        if (!got || !sameToken(got, want)) return fail(401, 40101, 'this relay needs its token to open a room or store a puzzle (Authorization: Bearer …)');
       }
       this.meta = { seq: 0, last: 0 };
     }

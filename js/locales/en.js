@@ -418,4 +418,7 @@ export default {
   "room.relayBusyPlain": "The relay is busy (too many requests). Try again in a moment.",
   "room.relayToken": "This relay needs its token. Enter it under Relay in the lobby.",
   "room.openFailedToken": "This relay only opens rooms with its token. Enter it under Relay in the lobby, then try again.",
+  "lobby.relayOkToken": "Your relay answers and accepts your token. New rooms will open there.",
+  "lobby.relayBadToken": "Your relay answers, but it doesn't accept this token. Paste exactly the CREATE_TOKEN you gave wrangler, then Save.",
+  "lobby.relayNoToken": "Your relay answers and has no token, so anyone with its address can open rooms there. New rooms will open there.",
 };

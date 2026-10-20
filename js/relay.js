@@ -37,17 +37,28 @@ const POLL_INTERVAL_MS = 5000; // ntfy.sh refills one request every 5 s per visi
 const IDLE_POLL_MS = 30000; // after the relay closed a quiet stream (see 'idle' below)
 const STREAM_SILENCE_MS = 75000; // ntfy sends a keepalive every 45 s
 
-// Does this relay answer? ntfy and our own relay both serve /v1/health.
-export async function relayHealthy(base, timeoutMs = 4000) {
+// Does this relay answer? ntfy and our own relay both serve /v1/health. Returns
+// { ok, token }, where token is what our relay says about the token given: 'ok', 'wrong',
+// 'none' (the relay has no token), or 'unknown' (an ntfy server, or no token to check).
+export async function relayHealthy(base, token = '', timeoutMs = 4000) {
+  const url = `${base.replace(/\/+$/, '')}/v1/health`;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const ask = async (headers) => {
+    const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal, headers });
+    if (!res.ok) return null;
+    const j = await res.json().catch(() => ({}));
+    return j && j.healthy === false ? null : j || {};
+  };
   try {
-    const res = await fetch(`${base.replace(/\/+$/, '')}/v1/health`, { cache: 'no-store', signal: ctrl.signal });
-    if (!res.ok) return false;
-    const j = await res.json().catch(() => null);
-    return !j || j.healthy !== false;
+    // Ask with the token first; an ntfy server might reject a token it doesn't know, so ask
+    // again without it before calling the relay down.
+    let j = await ask({ Authorization: `Bearer ${token}` });
+    if (!j) j = await ask({});
+    if (!j) return { ok: false, token: 'unknown' };
+    return { ok: true, token: ['ok', 'wrong', 'none'].includes(j.token) ? j.token : 'unknown' };
   } catch {
-    return false;
+    return { ok: false, token: 'unknown' };
   } finally {
     clearTimeout(timer);
   }

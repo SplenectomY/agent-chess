@@ -416,4 +416,7 @@ export default {
   "room.relayBusyPlain": "Il relay è occupato (troppe richieste). Riprova tra un momento.",
   "room.relayToken": "Questo relay richiede il suo token. Inseriscilo sotto Relay, nella lobby.",
   "room.openFailedToken": "Questo relay apre stanze solo con il suo token. Inseriscilo sotto Relay, nella lobby, e riprova.",
+  "lobby.relayOkToken": "Il tuo relay risponde e accetta il tuo token. Le nuove stanze si apriranno lì.",
+  "lobby.relayBadToken": "Il tuo relay risponde, ma non accetta questo token. Incolla esattamente il CREATE_TOKEN dato a wrangler, poi Salva.",
+  "lobby.relayNoToken": "Il tuo relay risponde e non ha un token, quindi chiunque ne conosca l'indirizzo può aprirvi stanze. Le nuove stanze si apriranno lì.",
 };

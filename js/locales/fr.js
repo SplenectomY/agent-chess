@@ -416,4 +416,7 @@ export default {
   "room.relayBusyPlain": "Le relais est occupé (trop de requêtes). Réessayez dans un instant.",
   "room.relayToken": "Ce relais a besoin de son jeton. Saisissez-le sous Relais, dans l'accueil.",
   "room.openFailedToken": "Ce relais n'ouvre des salles qu'avec son jeton. Saisissez-le sous Relais, dans l'accueil, puis réessayez.",
+  "lobby.relayOkToken": "Votre relais répond et accepte votre jeton. Les nouvelles salles s'ouvriront là-bas.",
+  "lobby.relayBadToken": "Votre relais répond, mais n'accepte pas ce jeton. Collez exactement le CREATE_TOKEN donné à wrangler, puis Enregistrer.",
+  "lobby.relayNoToken": "Votre relais répond et n'a pas de jeton : quiconque connaît son adresse peut y ouvrir des salles. Les nouvelles salles s'ouvriront là-bas.",
 };

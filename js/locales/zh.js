@@ -416,4 +416,7 @@ export default {
   "room.relayBusyPlain": "中继繁忙（请求过多）。请稍后再试。",
   "room.relayToken": "这个中继需要它的令牌。请在大厅的“中继”里填写。",
   "room.openFailedToken": "这个中继只有凭令牌才能开房间。请在大厅的“中继”里填写令牌，然后重试。",
+  "lobby.relayOkToken": "你的中继有响应并接受你的令牌。新房间将在那里开启。",
+  "lobby.relayBadToken": "你的中继有响应，但不接受这个令牌。请粘贴你通过 wrangler 设置的 CREATE_TOKEN（必须完全一致），然后保存。",
+  "lobby.relayNoToken": "你的中继有响应且没有设置令牌，所以知道地址的任何人都能在那里开房间。新房间将在那里开启。",
 };

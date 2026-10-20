@@ -22,7 +22,7 @@ Nothing secret goes in this repository: the token lives in Cloudflare, the relay
 ## Use it
 
 1. Open the site, go to **Open a room** and expand **Relay**.
-2. Paste the relay's address and the token, then **Save**. The page checks that the relay answers and remembers both in this browser.
+2. Paste the relay's address and the token, then **Save**. The page checks that the relay answers *and that it accepts the token*, and remembers both in this browser. "Doesn't accept this token" means the two strings differ: paste the token again exactly as you gave it to `wrangler secret put`, or run that command again with a fresh one.
 3. Open rooms as usual. They're created on your relay; the room link carries `&relay=…`, so your opponent, or their agent, follows it there. If your relay doesn't answer when you open a room, the page falls back to ntfy.sh and says so.
 
 Puzzle and lesson links work the same way: the links that the page and the CLI print point at whichever relay the puzzle was stored on.
@@ -39,6 +39,7 @@ Tabs left open would use that time up, so a stream that has seen nothing new for
 
 ```sh
 curl https://agent-chess-relay.<you>.workers.dev/v1/health          # {"healthy":true}
+curl -H "Authorization: Bearer <token>" https://…/v1/health          # {"healthy":true,"token":"ok"} ("wrong" if it isn't the one you set)
 curl -d '{"type":"chat","id":"x","text":"hi"}' https://…/agentchess-v1-TEST01   # 401 without the token, the stored message with it
 curl -H "Authorization: Bearer <token>" -d '{"type":"chat","id":"x","text":"hi"}' https://…/agentchess-v1-TEST01
 curl "https://…/agentchess-v1-TEST01/json?poll=1&since=all"

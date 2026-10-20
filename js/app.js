@@ -144,13 +144,32 @@ document.addEventListener('keydown', initAudio, { once: true });
 // =====================================================================
 
 // ---------- relay choice (the "Relay" box under "Open a room") ----------
-let relayCheck = null; // { url, ok, at }: the last health check, good for a minute
+let relayCheck = null; // { url, token, ok, tokenState, at }: the last health check, good for a minute
 let relayStatus = null; // { kind, text } shown under the fields
-async function checkRelay(url) {
-  if (relayCheck && relayCheck.url === url && Date.now() - relayCheck.at < 60000) return relayCheck.ok;
-  const ok = await relayHealthy(url);
-  relayCheck = { url, ok, at: Date.now() };
-  return ok;
+async function checkRelay(url, token) {
+  if (relayCheck && relayCheck.url === url && relayCheck.token === token && Date.now() - relayCheck.at < 60000) return relayCheck;
+  const r = await relayHealthy(url, token);
+  relayCheck = { url, token, ok: r.ok, tokenState: r.token, at: Date.now() };
+  return relayCheck;
+}
+
+// What the health check means for the player.
+function relayVerdict(r) {
+  if (!r.ok) return { kind: 'bad', text: t('lobby.relayDown') };
+  if (r.tokenState === 'wrong') return { kind: 'bad', text: t('lobby.relayBadToken') };
+  if (r.tokenState === 'ok') return { kind: 'ok', text: t('lobby.relayOkToken') };
+  if (r.tokenState === 'none') return { kind: 'ok', text: t('lobby.relayNoToken') };
+  return { kind: 'ok', text: t('lobby.relayOk') };
+}
+
+// The relay fields as typed, normalized: { url, token }, or null when the address is empty.
+// A bad address throws with the message to show.
+function relayFields() {
+  let url = $('relay-url').value.trim().replace(/\/+$/, '');
+  if (!url) return null;
+  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
+  if (!/^https:\/\/[^\s/]+\.[^\s/]+/i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(url)) throw new Error(t('lobby.relayBadUrl'));
+  return { url, token: $('relay-token').value.trim() };
 }
 
 function renderRelayBox(status = relayStatus) {
@@ -164,10 +183,11 @@ function renderRelayBox(status = relayStatus) {
   st.textContent = status ? status.text : '';
 }
 
-async function showRelayHealth(url) {
+async function showRelayHealth({ url, token }) {
   renderRelayBox({ text: t('lobby.relayChecking') });
-  const ok = await checkRelay(url);
-  if ((savedRelay() || {}).url === url) renderRelayBox({ kind: ok ? 'ok' : 'bad', text: t(ok ? 'lobby.relayOk' : 'lobby.relayDown') });
+  const r = await checkRelay(url, token);
+  const sv = savedRelay();
+  if (sv && sv.url === url && sv.token === token) renderRelayBox(relayVerdict(r));
 }
 
 function wireRelayBox() {
@@ -175,18 +195,15 @@ function wireRelayBox() {
   $('relay-url').value = sv ? sv.url : '';
   $('relay-token').value = sv ? sv.token : '';
   renderRelayBox(null);
-  if (sv) showRelayHealth(sv.url);
+  if (sv) showRelayHealth(sv);
   $('relay-save').onclick = () => {
-    let url = $('relay-url').value.trim().replace(/\/+$/, '');
-    if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`;
-    if (!/^https:\/\/[^\s/]+\.[^\s/]+/i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(url)) {
-      renderRelayBox({ kind: 'bad', text: t('lobby.relayBadUrl') });
-      return;
-    }
-    $('relay-url').value = url;
-    store.set('agentchess:relay', { url, token: $('relay-token').value.trim() });
+    let f;
+    try { f = relayFields(); } catch (err) { renderRelayBox({ kind: 'bad', text: err.message }); return; }
+    if (!f) { $('relay-clear').onclick(); return; }
+    $('relay-url').value = f.url;
+    store.set('agentchess:relay', f);
     relayCheck = null;
-    showRelayHealth(url);
+    showRelayHealth(f);
   };
   $('relay-clear').onclick = () => {
     try { localStorage.removeItem('agentchess:relay'); } catch { /* private mode */ }
@@ -230,15 +247,26 @@ function showLobby() {
       const [m, i] = tcVal.split('+').map(Number);
       time = { initial: m * 60, increment: i };
     }
-    // Your own relay when it answers, otherwise ntfy.sh. A ?relay= in the address wins.
-    const sv = params.get('relay') ? null : savedRelay();
+    // Your own relay when it answers, otherwise ntfy.sh. What's in the Relay fields counts, saved
+    // or not, so a token pasted without pressing Save still works. A ?relay= in the address wins.
+    let sv = null;
+    if (!params.get('relay')) {
+      try { sv = relayFields(); } catch (err) { $('create-error').textContent = err.message; return; }
+      const saved = savedRelay();
+      if (sv && (!saved || saved.url !== sv.url || saved.token !== sv.token)) { store.set('agentchess:relay', sv); renderRelayBox(null); }
+    }
     if (sv) {
       const btn = e.target.querySelector('button[type=submit]');
       btn.disabled = true;
       $('create-error').textContent = '';
-      const ok = await checkRelay(sv.url);
+      const r = await checkRelay(sv.url, sv.token);
       btn.disabled = false;
-      if (ok) { RELAY = sv.url; TOKEN = sv.token; } else { RELAY = DEFAULT_RELAY; TOKEN = ''; toast(t('lobby.relayFallback')); }
+      if (r.ok && r.tokenState === 'wrong') { // it would only be refused: say why instead
+        $('create-error').textContent = t('lobby.relayBadToken');
+        renderRelayBox(relayVerdict(r));
+        return;
+      }
+      if (r.ok) { RELAY = sv.url; TOKEN = sv.token; } else { RELAY = DEFAULT_RELAY; TOKEN = ''; toast(t('lobby.relayFallback')); }
     }
     const code = randomString(6);
     const id = 'p-' + randomString(12, 'abcdefghijklmnopqrstuvwxyz0123456789');

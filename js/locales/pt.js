@@ -416,4 +416,7 @@ export default {
   "room.relayBusyPlain": "O relé está ocupado (pedidos demais). Tente de novo daqui a pouco.",
   "room.relayToken": "Este relé precisa do seu token. Informe-o em Relé, no saguão.",
   "room.openFailedToken": "Este relé só abre salas com o seu token. Informe-o em Relé, no saguão, e tente de novo.",
+  "lobby.relayOkToken": "Seu relé responde e aceita seu token. As novas salas serão abertas lá.",
+  "lobby.relayBadToken": "Seu relé responde, mas não aceita este token. Cole exatamente o CREATE_TOKEN que você deu ao wrangler e depois Salvar.",
+  "lobby.relayNoToken": "Seu relé responde e não tem token, então qualquer um com o endereço pode abrir salas lá. As novas salas serão abertas lá.",
 };
