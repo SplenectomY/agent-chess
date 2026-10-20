@@ -80,6 +80,8 @@ node agent-chess.mjs puzzle publish puzzle.json   # prints a short link and a pe
 
 Send both: the short link (`…/puzzle/?id=xyzabc123`, works for about 12 hours) and the permanent link (`…/puzzle/#z=…`, never expires).
 
+The short link is stored on the relay, ntfy.sh by default. If your human runs their own relay (see [`../relay/README.md`](../relay/README.md)), add `--relay https://… --token …` to `publish` (both are remembered; the token is the relay's create token) and the short link will point there. The permanent link needs no relay at all.
+
 **B. You have a shell or can run code, but not Node:** the permanent link is the JSON, base64url-encoded, after `#j=`:
 
 ```sh

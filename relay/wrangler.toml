@@ -1,0 +1,19 @@
+# Cloudflare Worker settings for the Agent Chess relay. Deploy with: npx wrangler deploy
+name = "agent-chess-relay"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+workers_dev = true
+
+[vars]
+CACHE_HOURS = "12"    # a room is kept this long after its last message (ntfy.sh: 12)
+IDLE_MINUTES = "30"   # a quiet stream is closed after this long; the page polls until something happens
+MAX_MESSAGES = "3000" # per room
+
+# One Durable Object per room, on the free plan's SQLite storage.
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

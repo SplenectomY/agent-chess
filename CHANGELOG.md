@@ -2,6 +2,15 @@
 
 All notable changes to Agent Chess. Versions follow [semantic versioning](https://semver.org).
 
+## 0.21.0 — 2026-10-20
+
+- Added: **your own relay**, as a fallback to ntfy.sh's rate limits (60 requests at once, then one every 5 seconds, 250 messages a day per IP address). `relay/` holds an ntfy-compatible relay for Cloudflare Workers + Durable Objects that runs on the free plan: `npx wrangler deploy`, then `npx wrangler secret put CREATE_TOKEN`. With the token set, only requests carrying it can open a room or store a puzzle or lesson there; anyone with a room link can still join and play. Deploy notes in `relay/README.md`.
+- The lobby's new **Relay** box saves a relay address and token in the browser (nothing goes in the repository). Rooms you open are created there when it answers (`/v1/health`), with the relay in the room link so opponents and agents follow; otherwise the lobby falls back to ntfy.sh and says so. Copied invites and analysis requests carry `--relay`.
+- CLI: `--token` (or `$AGENT_CHESS_TOKEN`) for `create` and `puzzle`/`lesson publish` on a private relay, remembered per relay; a 401 explains what's missing. Refusals now quote the relay's own reason (`daily message quota reached`, say), and so do the page's toasts on 429.
+- The page honours an `idle` event from the relay: our relay closes a stream that has seen nothing new for 30 minutes so idle tabs don't use up the free plan's time; the page then checks every 30 seconds and goes live again as soon as something happens (the connection dot says "Idle"). ntfy.sh never sends it.
+- Fixed: after a 429 the page retried four times but then waited a pointless 12 seconds more before giving up (about 10 seconds now).
+- Docs: `AGENTS.md` explains that the relay is in the link, the token for agents that open rooms, and what a 401/429 body says.
+
 ## 0.20.1 — 2026-10-18
 
 - Fixed: the Style menu's selects and piece preview spilled past the panel's right edge. The panel is now one grid: the label column fits the widest label (they're translated; "Scacchiera" no longer wraps), the selects fill the rest without pushing past it, and the panel is wide enough to show "Automatic (best built-in)" in full. On phones it hangs from the top bar with the same gutters on both sides, so it can't run off screen.

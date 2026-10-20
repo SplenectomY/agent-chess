@@ -1,6 +1,6 @@
 import { Chess } from '../vendor/chess.js';
 import * as G from './game.js';
-import { Relay, DEFAULT_RELAY, topicFor } from './relay.js';
+import { Relay, DEFAULT_RELAY, topicFor, relayHealthy } from './relay.js';
 import { VERSION } from './version.js';
 import { $, el, store, toast, copy, pieceNode, applyLook, wireStyleMenu } from './ui.js';
 import { loadOpenings, identify, ecoVolume } from './openings.js';
@@ -41,7 +41,17 @@ function tNodes(key, nodes = {}, vars = {}) {
 
 
 const params = new URLSearchParams(location.search);
-const RELAY = (params.get('relay') || DEFAULT_RELAY).replace(/\/+$/, '');
+// The relay this page talks to. A room link can name one (?relay=…); rooms opened here go to the
+// relay saved in this browser when it answers, else to ntfy.sh (see relay/README.md). Links and
+// copied instructions always carry the relay, so opponents and agents follow the room there.
+function savedRelay() {
+  const r = store.get('agentchess:relay');
+  return r && typeof r.url === 'string' && r.url ? { url: r.url.replace(/\/+$/, ''), token: String(r.token || '') } : null;
+}
+let RELAY = (params.get('relay') || DEFAULT_RELAY).replace(/\/+$/, '');
+let TOKEN = ''; // our own relay's create token, sent only to that relay
+{ const sv = savedRelay(); if (sv && sv.url === RELAY) TOKEN = sv.token; }
+const relayFlag = () => (RELAY !== DEFAULT_RELAY ? ` --relay ${RELAY}` : '');
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 
 // ---------- small utilities ----------
@@ -132,6 +142,61 @@ document.addEventListener('keydown', initAudio, { once: true });
 // =====================================================================
 // Lobby
 // =====================================================================
+
+// ---------- relay choice (the "Relay" box under "Open a room") ----------
+let relayCheck = null; // { url, ok, at }: the last health check, good for a minute
+let relayStatus = null; // { kind, text } shown under the fields
+async function checkRelay(url) {
+  if (relayCheck && relayCheck.url === url && Date.now() - relayCheck.at < 60000) return relayCheck.ok;
+  const ok = await relayHealthy(url);
+  relayCheck = { url, ok, at: Date.now() };
+  return ok;
+}
+
+function renderRelayBox(status = relayStatus) {
+  relayStatus = status;
+  const sv = savedRelay();
+  $('relay-summary').textContent = sv ? sv.url.replace(/^https?:\/\//, '') : t('lobby.relayDefault');
+  $('relay-intro').replaceChildren(...tNodes('lobby.relayIntro', { link: el('a', { href: 'https://github.com/SplenectomY/agent-chess/tree/main/relay', text: t('lobby.relayReadme') }) }));
+  $('relay-clear').hidden = !sv;
+  const st = $('relay-status');
+  st.className = `relay-status${status && status.kind ? ` ${status.kind}` : ''}`;
+  st.textContent = status ? status.text : '';
+}
+
+async function showRelayHealth(url) {
+  renderRelayBox({ text: t('lobby.relayChecking') });
+  const ok = await checkRelay(url);
+  if ((savedRelay() || {}).url === url) renderRelayBox({ kind: ok ? 'ok' : 'bad', text: t(ok ? 'lobby.relayOk' : 'lobby.relayDown') });
+}
+
+function wireRelayBox() {
+  const sv = savedRelay();
+  $('relay-url').value = sv ? sv.url : '';
+  $('relay-token').value = sv ? sv.token : '';
+  renderRelayBox(null);
+  if (sv) showRelayHealth(sv.url);
+  $('relay-save').onclick = () => {
+    let url = $('relay-url').value.trim().replace(/\/+$/, '');
+    if (url && !/^https?:\/\//i.test(url)) url = `https://${url}`;
+    if (!/^https:\/\/[^\s/]+\.[^\s/]+/i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(url)) {
+      renderRelayBox({ kind: 'bad', text: t('lobby.relayBadUrl') });
+      return;
+    }
+    $('relay-url').value = url;
+    store.set('agentchess:relay', { url, token: $('relay-token').value.trim() });
+    relayCheck = null;
+    showRelayHealth(url);
+  };
+  $('relay-clear').onclick = () => {
+    try { localStorage.removeItem('agentchess:relay'); } catch { /* private mode */ }
+    $('relay-url').value = '';
+    $('relay-token').value = '';
+    relayCheck = null;
+    renderRelayBox({ text: t('lobby.relayCleared') });
+  };
+}
+
 function showLobby() {
   $('lobby').hidden = false;
   $('room').hidden = true;
@@ -143,7 +208,8 @@ function showLobby() {
     $('tc-custom').hidden = grid.querySelector('input:checked').value !== 'custom';
   });
 
-  $('create-form').addEventListener('submit', (e) => {
+  wireRelayBox();
+  $('create-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = $('create-name').value.trim();
     if (!name) return;
@@ -163,6 +229,16 @@ function showLobby() {
     } else if (tcVal !== 'none') {
       const [m, i] = tcVal.split('+').map(Number);
       time = { initial: m * 60, increment: i };
+    }
+    // Your own relay when it answers, otherwise ntfy.sh. A ?relay= in the address wins.
+    const sv = params.get('relay') ? null : savedRelay();
+    if (sv) {
+      const btn = e.target.querySelector('button[type=submit]');
+      btn.disabled = true;
+      $('create-error').textContent = '';
+      const ok = await checkRelay(sv.url);
+      btn.disabled = false;
+      if (ok) { RELAY = sv.url; TOKEN = sv.token; } else { RELAY = DEFAULT_RELAY; TOKEN = ''; toast(t('lobby.relayFallback')); }
     }
     const code = randomString(6);
     const id = 'p-' + randomString(12, 'abcdefghijklmnopqrstuvwxyz0123456789');
@@ -236,12 +312,20 @@ function wakeOpponent(event, extra = {}) {
 }
 const oppName = () => { const me = seat(); return me ? pName(R.s, G.other(me)) : ''; };
 
+// What to tell the player when the relay refused something, in the relay's own words when it
+// gave any (ntfy: "daily message quota reached"; ours: "this relay needs its token…").
+function relayErrorText(err) {
+  if (err && err.status === 401) return t('room.relayToken');
+  if (err && err.status === 429) return err.reason ? t('room.relayBusy', { reason: err.reason }) : t('room.relayBusyPlain');
+  return t('room.sendFailed');
+}
+
 async function publish(data) {
   try {
     await R.relay.publish({ v: G.PROTOCOL_VERSION, ...data });
     return true;
   } catch (err) {
-    toast(t('room.sendFailed'));
+    toast(relayErrorText(err));
     return false;
   }
 }
@@ -262,6 +346,7 @@ async function enterRoom(code, { create = null } = {}) {
 
   R.relay = new Relay({
     base: RELAY,
+    token: TOKEN,
     code,
     onEvent: (ev, live) => {
       R.events.push(ev);
@@ -289,9 +374,10 @@ async function enterRoom(code, { create = null } = {}) {
   if (create) {
     R.creating = true;
     $('room-loading').textContent = t('room.opening');
-    const ok = await publish(create);
-    if (!ok) {
-      $('room-loading').textContent = t('room.openFailed');
+    try {
+      await R.relay.publish({ v: G.PROTOCOL_VERSION, ...create });
+    } catch (err) {
+      $('room-loading').textContent = err.status === 401 ? t('room.openFailedToken') : `${t('room.openFailed')} ${err.status === 429 ? relayErrorText(err) : ''}`.trim();
       return;
     }
   }
@@ -843,7 +929,7 @@ function inviteText(s) {
     '',
     'B) Command line (Node 18+, no installs):',
     `   curl -sO ${siteBase()}agent-chess.mjs`,
-    `   node agent-chess.mjs join ${R.code} --name "YOUR NAME"${RELAY !== DEFAULT_RELAY ? ` --relay ${RELAY}` : ''}`,
+    `   node agent-chess.mjs join ${R.code} --name "YOUR NAME"${relayFlag()}`,
     `   node agent-chess.mjs wait ${R.code}       # returns when it's your move, or after 20 s with "not yet" (run it again)`,
     `   node agent-chess.mjs move ${R.code} e5     # SAN or UCI`,
     '',
@@ -1000,7 +1086,7 @@ function analysisPrompt() {
     'Also post evaluations for the advantage bar beside my board: one number per half-move from White\'s point of view (pawns, like +0.3 or -1.2; M3 for mate in 3), starting with the starting position. If you have an engine, use its numbers; otherwise estimate from material and position, and say so in your summary.',
     '',
     'With the command-line client (same id you played with):',
-    `   node agent-chess.mjs review ${R.code}                  # every move with its position, numbered like 14w / 14b`,
+    `   node agent-chess.mjs review ${R.code}${relayFlag()}                  # every move with its position, numbered like 14w / 14b`,
     `   node agent-chess.mjs annotate ${R.code} 14b "Nf6 drops the e5 pawn." --tag mistake --better Nd7`,
     `   node agent-chess.mjs evals ${R.code} "0.2 0.3 0.1 -0.4 ..."     # one per half-move, starting position first (or --file evals.json)`,
     `   node agent-chess.mjs annotate ${R.code} summary "Your 2–3 sentence summary."`,
@@ -1371,7 +1457,7 @@ function renderAgentHelp() {
     lang() !== 'en' ? el('p', { class: 'hint', text: t('agents.englishNote') }) : null,
     el('p', { text: 'You can play right here: enter a name in "Join this game", press the join button, then type moves into the "Type a move" box and press Enter. Moves can be SAN (Nf3, exd5, O-O, e8=Q) or UCI (g1f3, e7e8q). If the page is not in English, add &lang=en to the address to switch it.' }),
     el('p', { text: 'Without a browser, use the command-line client (Node 18+):' }),
-    el('pre', { text: `curl -sO ${siteBase()}agent-chess.mjs\nnode agent-chess.mjs join ${R.code} --name "YOUR NAME"\nnode agent-chess.mjs wait ${R.code}\nnode agent-chess.mjs move ${R.code} <move>` }),
+    el('pre', { text: `curl -sO ${siteBase()}agent-chess.mjs\nnode agent-chess.mjs join ${R.code} --name "YOUR NAME"${relayFlag()}\nnode agent-chess.mjs wait ${R.code}\nnode agent-chess.mjs move ${R.code} <move>` }),
     el('p', { text: 'Or speak to the relay directly. Every action is a POST of one JSON message; reading the room returns every message so far, one per line:' }),
     el('pre', { text: `curl -s "${topicUrl}/json?poll=1&since=all"\ncurl -s -d '{"type":"join","id":"YOUR-ID","name":"YOUR NAME"}' ${topicUrl}\ncurl -s -d '{"type":"move","id":"YOUR-ID","uci":"e2e4"}' ${topicUrl}` }),
     el('p', {}, 'The full protocol is in ', el('a', { href: 'AGENTS.md', text: 'AGENTS.md' }), '.'),
@@ -1435,11 +1521,12 @@ function renderConn() {
   if (!c || !st) return;
   c.dataset.state = st;
   c.textContent = t(`conn.${st}`);
-  c.title = st === 'polling' ? t('conn.pollingTitle') : '';
+  c.title = st === 'polling' ? t('conn.pollingTitle') : st === 'idle' ? t('conn.idleTitle') : '';
 }
 
 function renderLobbyText() {
   $('agents-hint').replaceChildren(...tNodes('lobby.agentsHint', { link: el('a', { href: 'AGENTS.md', text: 'AGENTS.md' }) }));
+  if (!R.code) renderRelayBox();
 }
 
 // Re-draw everything in a new language (static text is handled by data-i18n).

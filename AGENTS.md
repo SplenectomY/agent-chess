@@ -10,6 +10,7 @@ Someone sent you a link like `https://splenectomy.github.io/agent-chess/?room=AB
 - The game ends on checkmate, stalemate, insufficient material, threefold repetition, the fifty-move rule, resignation, an agreed draw, or a flag (time out).
 - After a game, either player can ask for a rematch. When both ask, a new game starts in the same room with colors swapped.
 - Rooms are kept for 12 hours after their last message.
+- **The relay is in the link.** Rooms live on a message relay, ntfy.sh by default. A link with `&relay=https://…` means the room is on that relay instead (someone's own, see [`relay/README.md`](relay/README.md)): the CLI takes it from `--relay` on your first command for the room and remembers it, and over plain HTTP you use that address in place of `https://ntfy.sh`. Everything else is the same.
 
 ## Languages
 
@@ -78,7 +79,7 @@ You can open the room yourself and send your human the link:
 node agent-chess.mjs create --name "Your Name" --color b --time 10+5   # or --color w / random, --time none
 ```
 
-It prints the room code and a link like `https://splenectomy.github.io/agent-chess/?room=ABC234`. Send them the link: they open it, type their name and press **Join game**. Then run `wait ROOM` as usual. Before anyone joins, `wait` times out with `"phase": "waiting-for-opponent-to-join"`; run it again. The clock starts when they join, and `wait` returns once it's your move. Pick a time control your loop can keep up with (`10+30` or `none` if you can't stay in a loop).
+It prints the room code and a link like `https://splenectomy.github.io/agent-chess/?room=ABC234`. Send them the link: they open it, type their name and press **Join game**. If your human runs their own relay, they'll give you its address and its token: add `--relay https://… --token …` to `create` (both are remembered, the token per relay). The token is only needed to open rooms and store puzzles or lessons there, never to join. Then run `wait ROOM` as usual. Before anyone joins, `wait` times out with `"phase": "waiting-for-opponent-to-join"`; run it again. The clock starts when they join, and `wait` returns once it's your move. Pick a time control your loop can keep up with (`10+30` or `none` if you can't stay in a loop).
 
 ### If your tools cut long commands off
 
@@ -154,13 +155,13 @@ An analysis request never interrupts a mid-game `wait`; it can only come after t
 
 **Fields worth branching on** (in every `--json` snapshot): `"phase"` (`waiting-for-opponent-to-join`, `your-move`, `opponent-to-move`, `postgame`), `"yourMove"`, `"gameOver"`, `"result"` (`score`, `winner`, `reason`), `"pending"`, `"keepListening"`, `"secondsSinceGameEnd"`, `"newChat"` (chat you haven't been shown yet), `"chat"` (the last 10 lines) and `"nextStep"` (what to do next, in words).
 
-The CLI remembers which relay each room uses, so `--relay` is needed only on your first command for a room. It also remembers which chat and results you've already seen, in `~/.agent-chess.json`. If your home directory isn't writable, `newChat` repeats recent lines and a post-game `wait` returns at once: use `wait ROOM --any` after the game.
+The CLI remembers which relay each room uses, so `--relay` is needed only on your first command for a room (take it from the link's `&relay=`; without one, it's ntfy.sh). A private relay's create token (`--token`, or `$AGENT_CHESS_TOKEN`) is remembered per relay. It also remembers which chat and results you've already seen, in `~/.agent-chess.json`. If your home directory isn't writable, `newChat` repeats recent lines and a post-game `wait` returns at once: use `wait ROOM --any` after the game.
 
 `wait` exit codes: **0** means it's your move, the game ended or a draw was offered (one board snapshot follows). **2** means it timed out with nothing new (default 20 s, change with `--timeout`), so run it again. **3** means "not yet", from `--once`. **4** means a newer `wait` replaced this one. Anything else is an error.
 
 ## Option C: raw HTTP (curl or any HTTP client)
 
-The room is a public message log on an [ntfy](https://ntfy.sh) relay. The topic is `agentchess-v1-` followed by the room code in uppercase:
+The room is a public message log on an [ntfy](https://ntfy.sh) relay, or on a relay with the same API (the link's `&relay=` names it; use that address in place of `https://ntfy.sh` below). The topic is `agentchess-v1-` followed by the room code in uppercase:
 
 ```
 https://ntfy.sh/agentchess-v1-ABC234
@@ -190,6 +191,8 @@ curl -s -d '{"type":"move","id":"my-unique-id","uci":"e7e5"}'      https://ntfy.
 ```
 
 Choose an `id` (any string up to 64 characters that nobody else will use) and send it on every message. That id is your seat. Messages may also carry `"v":1` (the protocol version). You can include it or leave it out.
+
+On someone's own relay, the first message on a new topic (a `create`, or a puzzle's first part) needs its create token: `-H "Authorization: Bearer <token>"`. A 401 with `"error"` in the body means it's missing. Joining and everything after needs no token. A 429 is a rate limit; the body's `"error"` says which (ntfy.sh: 60 requests at once, then one every 5 seconds, 250 messages a day per address).
 
 **Checklist for HTTP-only agents:**
 

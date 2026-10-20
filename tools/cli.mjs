@@ -77,7 +77,10 @@ Options
   --id ID        Your player id (default: generated once per room and saved in ~/.agent-chess.json)
   --name NAME    Your display name
   --lang CODE    Your language (e.g. es) for create/join; players see it, the CLI stays in English
-  --relay URL    Relay server (default ${DEFAULT_RELAY})
+  --relay URL    Relay server (default ${DEFAULT_RELAY}). Remembered per room, so it's only needed
+                 on the first command for a room. Also $AGENT_CHESS_RELAY.
+  --token TOKEN  A private relay's create token (needed to open rooms and store puzzles there).
+                 Remembered per relay. Also $AGENT_CHESS_TOKEN.
   --json         Print machine-readable JSON instead of text
   --version      Print the version
 
@@ -104,6 +107,9 @@ const cmd = pos[0];
 // Relay: --relay, else $AGENT_CHESS_RELAY, else whatever this room used before, else ntfy.sh.
 let RELAY = String(opt.relay || process.env.AGENT_CHESS_RELAY || DEFAULT_RELAY).replace(/\/+$/, '');
 const RELAY_GIVEN = !!(opt.relay || process.env.AGENT_CHESS_RELAY);
+// Create token for a private relay (see relay/README.md): --token, else $AGENT_CHESS_TOKEN, else the
+// one saved for this relay. Sent as "Authorization: Bearer …" on every POST to that relay.
+const TOKEN_GIVEN = typeof opt.token === 'string' ? opt.token : process.env.AGENT_CHESS_TOKEN || '';
 const JSON_OUT = !!opt.json;
 
 function die(msg, code = 1) {
@@ -121,6 +127,26 @@ function saveId(code, ident) {
   const all = loadIds();
   all[code] = { ...(all[code] || {}), ...ident, relay: RELAY };
   try { writeFileSync(ID_FILE, JSON.stringify(all, null, 2)); } catch { /* read-only home: pass --id next time */ }
+}
+// Tokens live under "relays" in the same file, keyed by relay URL.
+function relayToken() {
+  if (TOKEN_GIVEN) return TOKEN_GIVEN;
+  const r = (loadIds().relays || {})[RELAY];
+  return r && typeof r.token === 'string' ? r.token : '';
+}
+function saveToken() {
+  if (!TOKEN_GIVEN || RELAY === DEFAULT_RELAY) return;
+  const all = loadIds();
+  all.relays = { ...(all.relays || {}), [RELAY]: { token: TOKEN_GIVEN } };
+  try { writeFileSync(ID_FILE, JSON.stringify(all, null, 2)); } catch { /* read-only home */ }
+}
+const authHeaders = () => (relayToken() ? { Authorization: `Bearer ${relayToken()}` } : {});
+// What the relay said when it refused, for error messages ({"error": "…"} from ntfy and ours).
+async function refusal(res) {
+  const j = await res.json().catch(() => null);
+  const why = j && typeof j.error === 'string' ? `: ${j.error}` : '';
+  if (res.status === 401) return `Relay refused (401${why}). This relay needs its create token: add --token TOKEN (asked once; it's remembered for ${RELAY}).`;
+  return `Relay refused the message (${res.status}${why}).`;
 }
 function identity(code, { create = false } = {}) {
   const saved = loadIds()[code] || {};
@@ -145,7 +171,7 @@ async function poll(code, since = 'all') {
     }
     if (res.ok) return (await res.text()).split('\n').map(parseNtfyLine).filter(Boolean);
     if (res.status === 429 && attempt < 3) { await sleep(5000 * (attempt + 1)); continue; }
-    die(`Relay answered ${res.status} when reading the room.`);
+    die(await refusal(res).then((m) => m.replace('the message', 'to answer') + ' (while reading the room)'));
   }
 }
 
@@ -154,15 +180,15 @@ async function publish(code, data) {
   for (let attempt = 0; ; attempt++) {
     let res;
     try {
-      res = await fetch(topicUrl(code), { method: 'POST', body });
+      res = await fetch(topicUrl(code), { method: 'POST', body, headers: authHeaders() });
     } catch (e) {
       if (attempt >= 3) die(`Could not reach the relay at ${RELAY}: ${e.message}`);
       await sleep(2000 * (attempt + 1));
       continue;
     }
-    if (res.ok) return (await res.json().catch(() => ({}))).id || null;
+    if (res.ok) { saveToken(); return (await res.json().catch(() => ({}))).id || null; }
     if ((res.status === 429 || res.status >= 500) && attempt < 3) { await sleep(5000 * (attempt + 1)); continue; }
-    die(`Relay refused the message (${res.status}).`);
+    die(await refusal(res));
   }
 }
 
@@ -701,8 +727,9 @@ async function cmdShare(kind) {
     const parts = splitParts(id, encoded);
     for (let i = 0; i < parts.length; i++) {
       if (i) await sleep(1100);
-      const res = await fetch(`${RELAY}/${K.prefix}${id}`, { method: 'POST', body: JSON.stringify(parts[i]) }).catch((e) => ({ ok: false, status: e.message }));
-      if (!res.ok) die(`Relay refused part ${i + 1} of ${parts.length} (${res.status}).`);
+      const res = await fetch(`${RELAY}/${K.prefix}${id}`, { method: 'POST', body: JSON.stringify(parts[i]), headers: authHeaders() }).catch((e) => ({ ok: false, status: e.message }));
+      if (!res.ok) die(typeof res.json === 'function' ? await refusal(res) : `Could not reach the relay at ${RELAY}: ${res.status}`);
+      saveToken();
     }
     const relayQ = RELAY !== DEFAULT_RELAY ? `&relay=${encodeURIComponent(RELAY)}` : '';
     const shortLink = `${SITE}${K.path}?id=${id}${relayQ}`;
